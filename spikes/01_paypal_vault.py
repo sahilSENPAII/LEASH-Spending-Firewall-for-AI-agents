@@ -8,8 +8,10 @@ Flow:
   5. Order B: same, then VOID the authorization
   6. Idempotency: resend order A's create call with the same PayPal-Request-Id -> must return the same order
 
-Run:  python spikes/01_paypal_vault.py
+Run:  python spikes/01_paypal_vault.py                      # full flow, pays SoundHub
+      python spikes/01_paypal_vault.py --vault-id XYZ --no-payee   # reuse saved wallet, pay the app's own account
 """
+import argparse
 import json
 import os
 import sys
@@ -25,6 +27,13 @@ BASE = os.environ["PAYPAL_BASE_URL"]
 CID = os.environ["PAYPAL_CLIENT_ID"]
 SECRET = os.environ["PAYPAL_CLIENT_SECRET"]
 PAYEE = os.environ["MERCHANT_SOUNDHUB_EMAIL"]
+
+ap = argparse.ArgumentParser()
+ap.add_argument("--vault-id", help="reuse an existing payment token, skip buyer approval")
+ap.add_argument("--no-payee", action="store_true", help="omit payee: funds go to the app's own sandbox business account")
+args = ap.parse_args()
+if args.no_payee:
+    PAYEE = None
 
 client = httpx.Client(base_url=BASE, timeout=30)
 
@@ -54,50 +63,56 @@ token = r.json()["access_token"]
 H = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 print("1. OAuth OK")
 
-# 2. Setup token
-r = client.post(
-    "/v3/vault/setup-tokens",
-    headers={**H, "PayPal-Request-Id": str(uuid.uuid4())},
-    json={
-        "payment_source": {
-            "paypal": {
-                "usage_type": "MERCHANT",
-                "customer_type": "CONSUMER",
-                "permit_multiple_payment_tokens": False,
-                "experience_context": {
-                    "return_url": "https://example.com/leash/return",
-                    "cancel_url": "https://example.com/leash/cancel",
-                    "brand_name": "Leash",
-                    "shipping_preference": "NO_SHIPPING",
-                    "vault_instruction": "ON_PAYER_APPROVAL",
-                },
+if args.vault_id:
+    vault_id = args.vault_id
+    print(f"2-3. Reusing saved wallet token: {vault_id}")
+else:
+    # 2. Setup token
+    r = client.post(
+        "/v3/vault/setup-tokens",
+        headers={**H, "PayPal-Request-Id": str(uuid.uuid4())},
+        json={
+            "payment_source": {
+                "paypal": {
+                    "usage_type": "MERCHANT",
+                    "customer_type": "CONSUMER",
+                    "permit_multiple_payment_tokens": False,
+                    "experience_context": {
+                        "return_url": "https://example.com/leash/return",
+                        "cancel_url": "https://example.com/leash/cancel",
+                        "brand_name": "Leash",
+                        "shipping_preference": "NO_SHIPPING",
+                        "vault_instruction": "ON_PAYER_APPROVAL",
+                    },
+                }
             }
-        }
-    },
-)
-setup = show("2. setup token", r)
-if r.status_code not in (200, 201):
-    fail("setup token rejected -> Vault may not be enabled on this sandbox app (check app settings)")
-approve = next((l["href"] for l in setup.get("links", []) if l.get("rel") == "approve"), None)
-if not approve:
-    fail("no approve link returned")
+        },
+    )
+    setup = show("2. setup token", r)
+    if r.status_code not in (200, 201):
+        fail("setup token rejected -> Vault may not be enabled on this sandbox app (check app settings)")
+    approve = next((l["href"] for l in setup.get("links", []) if l.get("rel") == "approve"), None)
+    if not approve:
+        fail("no approve link returned")
 
-print("\n>>> Opening the approval page. Log in with the SANDBOX BUYER account and approve.")
-print(f">>> If it doesn't open, paste this into your browser:\n{approve}")
-webbrowser.open(approve)
-input("\n>>> After approving (you'll land on example.com), press Enter here... ")
+    print("\n>>> Opening the approval page. Log in with the SANDBOX BUYER account and approve.")
+    print(f">>> If it doesn't open, paste this into your browser:\n{approve}")
+    webbrowser.open(approve)
+    input("\n>>> After approving (you'll land on example.com), press Enter here... ")
 
-# 3. Payment token
-r = client.post(
-    "/v3/vault/payment-tokens",
-    headers={**H, "PayPal-Request-Id": str(uuid.uuid4())},
-    json={"payment_source": {"token": {"id": setup["id"], "type": "SETUP_TOKEN"}}},
-)
-pt = show("3. payment token", r)
-if r.status_code not in (200, 201):
-    fail("could not exchange setup token for a payment token")
-vault_id = pt["id"]
-print(f"3. Saved wallet token: {vault_id}")
+    # 3. Payment token
+    r = client.post(
+        "/v3/vault/payment-tokens",
+        headers={**H, "PayPal-Request-Id": str(uuid.uuid4())},
+        json={"payment_source": {"token": {"id": setup["id"], "type": "SETUP_TOKEN"}}},
+    )
+    pt = show("3. payment token", r)
+    if r.status_code not in (200, 201):
+        fail("could not exchange setup token for a payment token")
+    vault_id = pt["id"]
+    print(f"3. Saved wallet token: {vault_id}")
+
+
 
 
 def create_order(amount, request_id):
@@ -108,7 +123,7 @@ def create_order(amount, request_id):
             "intent": "AUTHORIZE",
             "purchase_units": [{
                 "amount": {"currency_code": "USD", "value": amount},
-                "payee": {"email_address": PAYEE},
+                **({"payee": {"email_address": PAYEE}} if PAYEE else {}),
                 "description": "Leash spike",
             }],
             "payment_source": {"paypal": {"vault_id": vault_id}},
@@ -156,7 +171,7 @@ print(f"\n6. Retry with same PayPal-Request-Id -> same order: {same}")
 
 print("\n=== RESULTS ===")
 print(f"Vault charge without buyer click : {'YES' if order_a.get('id') else 'NO'}")
-print(f"Payee routing to SoundHub        : {order_a['purchase_units'][0].get('payee', {}).get('email_address')}")
+print(f"Payee                            : {order_a['purchase_units'][0].get('payee', {}).get('email_address')}")
 print(f"Capture                          : {cap.get('status')}")
 print(f"Void                             : {'OK' if void_status == 204 else void_status}")
 print(f"Idempotent retry                 : {same}")

@@ -34,3 +34,12 @@ One entry per decision: what we chose, what we rejected, why. Newest at the bott
 
 ## D9. Sandbox accounts are US-based, currency USD
 - Full feature coverage (Vault, authorize/capture, payee routing). PayPal India restricts domestic payments.
+
+## D10. All funds settle to the app's own sandbox merchant; Leash tracks the store itself
+- Spike 1 (Oct 30): Vault v3 saved wallet -> AUTHORIZE with no buyer click -> capture COMPLETED, void OK,
+  same PayPal-Request-Id returns the same order (idempotent). All work.
+- Setting `payee` to another merchant with a vault token fails: `BILLING_AGREEMENT_NOT_FOUND`.
+  The saved wallet's agreement is only with the app's own merchant account.
+- Real multi-merchant routing needs PayPal's partner/multiparty onboarding — out of scope.
+- So: orders carry no `payee`; the store (SoundHub / MegaDeals) is stored as Leash's `merchant_id` and in
+  the order `description` / `custom_id`. Allow/block per store is unchanged for the demo.
