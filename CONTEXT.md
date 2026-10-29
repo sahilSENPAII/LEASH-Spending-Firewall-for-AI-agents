@@ -40,7 +40,8 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 | M8 | Nov 12 | Devpost submission | — |
 
 ## Current state
-- M0 complete. Repo layout exists; `backend/ agent/ stores/ frontend/ ml/` are empty placeholders.
+- M0 complete. Repo layout exists. `backend/policy.py` now contains a standalone deterministic evaluator; `agent/`, `stores/`, `frontend/`, and `ml/` remain placeholders.
+- The policy evaluator returns ALLOW/BLOCK and relies on the caller for trusted signature verification and category/merchant provenance. It is not yet integrated with MCP or Postgres.
 - PayPal sandbox works: Vault v3 saved wallet → AUTHORIZE (no buyer click) → capture / void,
   idempotent retries confirmed. All funds settle to the app's own merchant account (D10).
 - MCP stdio server works with Claude Desktop (spike). `mcp` pinned to `<2` (D11).
@@ -53,15 +54,22 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 Coming in M1: `DATABASE_URL` (Neon). Ask Sahil for the shared sandbox values.
 
 ## In progress
-- _(nothing claimed)_
+- Sahil: working directly on `main`; task scope has not been recorded in this handoff yet.
 
 ## Next up
 - [ ] Sahil: install Python 3.12 (`brew install uv && uv python install 3.12`)
 - [ ] Sahil: create Neon project `leash`, add `DATABASE_URL` to `.env`
+- [ ] Add focused unit coverage for `backend/policy.py`, then integrate it into `request_payment` with trusted signature/category/merchant inputs and atomic usage reservation.
 - [ ] M1 backend: FastAPI app + settings, Postgres models + Alembic, PayPal client (from spike 1),
-      MCP `request_payment` (policy stub), audit table, CI, Render deploy
+      MCP `request_payment`, audit table, CI, Render deploy
 
 ## Log (newest first)
+
+### 2026-10-30 IST — Anurag + Codex
+- Added `backend/policy.py`, a pure deterministic ALLOW/BLOCK evaluator with fail-closed input validation and reason codes.
+- The evaluator requires trusted upstream signature verification and trusted server-side merchant/category data. Its usage snapshot is read-only; transactional reservation and MCP integration remain pending.
+- No tests were added or run in this change; focused unit coverage remains next.
+- Files: `backend/policy.py`, `CONTEXT.md`.
 
 ### 2026-10-30 03:45 IST — Sahil + Claude
 - Added `CONTEXT.md` (this file) and `AGENTS.md` / `CLAUDE.md` pointers so every coding agent reads it first.
