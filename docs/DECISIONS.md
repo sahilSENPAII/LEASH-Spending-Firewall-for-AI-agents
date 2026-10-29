@@ -43,3 +43,7 @@ One entry per decision: what we chose, what we rejected, why. Newest at the bott
 - Real multi-merchant routing needs PayPal's partner/multiparty onboarding — out of scope.
 - So: orders carry no `payee`; the store (SoundHub / MegaDeals) is stored as Leash's `merchant_id` and in
   the order `description` / `custom_id`. Allow/block per store is unchanged for the demo.
+
+## D11. Pin the MCP Python SDK to 1.x (`mcp<2`)
+- Spike 2 (Oct 30): pip pulled mcp 2.x, which renamed FastMCP to MCPServer and changed other APIs.
+- 1.x FastMCP is stable, widely documented and what most examples use. Revisit 2.x after submission.
