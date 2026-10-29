@@ -42,7 +42,6 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 ## Current state
 - M0 complete. Repo layout exists. `backend/policy.py` now contains a standalone deterministic evaluator; `agent/`, `stores/`, `frontend/`, and `ml/` remain placeholders.
 - The policy evaluator returns ALLOW/BLOCK and relies on the caller for trusted signature verification and category/merchant provenance. It is not yet integrated with MCP or Postgres.
-- M0 has a single MegaDeals hidden-injection fixture; the complete demo shops, LangGraph shopping agent/attack script, ML pipeline, and frontend are not implemented yet.
 - PayPal sandbox works: Vault v3 saved wallet → AUTHORIZE (no buyer click) → capture / void,
   idempotent retries confirmed. All funds settle to the app's own merchant account (D10).
 - MCP stdio server works with Claude Desktop (spike). `mcp` pinned to `<2` (D11).
@@ -55,8 +54,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 Coming in M1: `DATABASE_URL` (Neon). Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Sahil + Claude (Track A): backend, database, PayPal, mandates, policy/audit, MCP tools, decision logic, Groq judge, approval API, and deploy.
-- Anurag + Codex (Track B): start with the SoundHub and MegaDeals demo shops; these will support the LangGraph shopping agent and attack demo.
+- Sahil: working directly on `main`; task scope has not been recorded in this handoff yet.
 
 ## Next up
 - [ ] Sahil: install Python 3.12 (`brew install uv && uv python install 3.12`)
@@ -64,14 +62,8 @@ Coming in M1: `DATABASE_URL` (Neon). Ask Sahil for the shared sandbox values.
 - [ ] Add focused unit coverage for `backend/policy.py`, then integrate it into `request_payment` with trusted signature/category/merchant inputs and atomic usage reservation.
 - [ ] M1 backend: FastAPI app + settings, Postgres models + Alembic, PayPal client (from spike 1),
       MCP `request_payment`, audit table, CI, Render deploy
-- [ ] Track B after the demo shops: LangGraph shopping robot + attack script; XGBoost + SHAP behind one function; React + AG Grid console; edit the demo video.
 
 ## Log (newest first)
-
-### 2026-10-30 IST — Anurag + Codex
-- Claimed Track B, starting with the SoundHub and MegaDeals demo shops. The existing M0 fixture only tests hidden injection text.
-- No product code changed yet; the storefronts will provide pages for the LangGraph agent and attack demo.
-- Files: `CONTEXT.md`.
 
 ### 2026-10-30 IST — Anurag + Codex
 - Added `backend/policy.py`, a pure deterministic ALLOW/BLOCK evaluator with fail-closed input validation and reason codes.
