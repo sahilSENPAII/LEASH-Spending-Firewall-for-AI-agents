@@ -9,7 +9,7 @@ This file is the source of agent-specific rules. `CLAUDE.md` points here; keep h
 ## Handoff files
 - After meaningful work or at session end, update `CONTEXT.md` directly on `main` with claims, current state, in-progress work, next steps, and a top-of-log entry; push it on `main` per rule 8.
 - When agent instructions change, update `AGENTS.md` directly on `main` and record that in `CONTEXT.md`.
-- Do not edit either `CONTEXT.md` or `AGENTS.md` on a code branch. Code goes on `sahil/<task>` or `anurag/<task>` branches and is submitted through a PR to `main`.
+- Do not edit either `CONTEXT.md` or `AGENTS.md` on a code branch. Code goes on the `sahil` / `anurag` branches → PR → `main`.
 
 House rules:
 - Python 3.12, FastAPI, Pydantic v2, async SQLAlchemy, Alembic. MCP Python SDK pinned `<2`.
@@ -84,7 +84,7 @@ House rules:
 ## Leash adaptations (these override the protocol above where they conflict)
 The protocol was written for bug fixes in upstream open-source repos. In this repo:
 - "Existing issues and PRs" means `CONTEXT.md` claims and the other person's branch. Stop if the task is already claimed.
-- Work on your own branch (`sahil` or `anurag`, or `<name>/<task>`). Merge `origin/main` into it before starting a task. "Upstream default branch" means `origin/main`.
+- Work on your own branch (`sahil` or `anurag`). Merge `origin/main` into it before starting a task. "Upstream default branch" means `origin/main`.
 - Bug fixes: the protocol applies as written (confirm the bug, smallest diff, tests fail without the fix and pass with it).
 - New features: the smallest design that meets the task. New modules, helpers and test files are allowed. Tests cover the new behaviour and its edge cases; the fail-without-fix proof does not apply.
 - One commit per `CONTEXT.md` task, then stop and report.

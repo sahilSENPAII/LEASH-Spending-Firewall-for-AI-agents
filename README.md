@@ -19,5 +19,21 @@ spikes/    throwaway M0 scripts that de-risk PayPal, MCP and Playwright
 docs/      requirements, plan, decisions, LEARN.md
 ```
 
+## Run tests
+Python 3.12, from the repo root. Create and activate a virtual environment:
+```bash
+python -m venv .venv
+```
+```bash
+source .venv/bin/activate
+```
+On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1` instead. Then:
+```bash
+python -m pip install -r backend/requirements-dev.txt
+```
+```bash
+python -m pytest
+```
+
 ## License
 MIT

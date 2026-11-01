@@ -15,7 +15,7 @@ Two people (Sahil + teammate) work on this repo. This is their shared handoff lo
 6. Never put secrets here. New env vars: add the *name* to `.env.example` and mention it in the log.
 7. Small commits, push often. If `git pull` conflicts in this file, keep both sides' entries.
 8. `CONTEXT.md` (human handoff) and `AGENTS.md` (agent instructions) are edited and pushed
-   directly on `main`. Code goes on `sahil/<task>` / `anurag/<task>` branches → PR → `main`. Code
+   directly on `main`. Code goes on the `sahil` / `anurag` branches → PR → `main`. Code
    branches do not touch `CONTEXT.md` or `AGENTS.md`.
 
 ## Project in one paragraph
@@ -25,7 +25,7 @@ checked against a user-signed mandate → ALLOW / STEP-UP / BLOCK, and logged in
 Stack: Python 3.12, FastAPI, Postgres (Neon), MCP Python SDK 1.x, PayPal REST v2 sandbox, Groq via
 LiteLLM, XGBoost + SHAP, LangGraph + Playwright demo agent, React + AG Grid. Zero spend (see D6).
 
-Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1–D11),
+Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1–D12),
 `docs/LEARN.md` (concepts), `spikes/README.md` (how to run the M0 tests).
 
 ## Milestones
@@ -47,7 +47,8 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 - Task split agreed (`task-split.md`): Sahil = money path + Groq judge; Anurag = trust path + XGBoost/SHAP + LangGraph agent.
 - Workflow docs are split: human handoff rules live in `CONTEXT.md`; agent-specific rules live in `AGENTS.md`. Both are maintained directly on `main`; code goes on task branches and through PRs.
 - The policy evaluator's 109 unit tests and exact Decimal budget check are now merged to `main`.
-- README test instructions and D12 are committed on branch `anurag` (`4352e5f`); they are pending main integration.
+- `backend/tests/test_policy.py` passes Sahil's Ruff 0.17.3 CI rules; the lint fix is merged to `main`.
+- README test instructions and D12's exact-budget decision are now merged into `main` from `anurag`.
 - PayPal sandbox works: Vault v3 saved wallet → AUTHORIZE (no buyer click) → capture / void,
   idempotent retries confirmed. All funds settle to the app's own merchant account (D10).
 - MCP stdio server works with Claude Desktop (spike). `mcp` pinned to `<2` (D11).
@@ -73,10 +74,10 @@ Ask Sahil for the shared sandbox values.
 ## Next up
 - [x] Sahil: Python 3.12 via uv; Neon project `leash` (AWS us-east-1), `DATABASE_URL` in `.env`.
 - [x] Unit tests and budget fix for `backend/policy.py` (Anurag + Claude; merged into `main` from branch `anurag`, Nov 2).
-- [ ] README test instructions and D12 exact-budget decision (commit `4352e5f` on branch `anurag`; main integration pending).
-- [ ] Both: write and agree `docs/CONTRACTS.md` (Nov 2).
-- [ ] Anurag: mandates — Ed25519 sign/verify, create/revoke, reserve/release budget (branch `anurag/mandates`).
-- [ ] Anurag: hash-chained audit log + `/audit/verify` (branch `anurag/audit`).
+- [x] README test instructions and D12 exact-budget decision (merged from `anurag` into `main`, Nov 2).
+- [ ] Both: write and agree `docs/CONTRACTS.md` (Nov 2), including that usage/reservation code computes `recent_payment_count` from payments inside the velocity window.
+- [ ] Anurag: mandates — Ed25519 sign/verify, create/revoke, reserve/release budget (branch `anurag`).
+- [ ] Anurag: hash-chained audit log + `/audit/verify` (branch `anurag`).
 - [ ] Integrate `policy.py` into `request_payment` with trusted signature/category/merchant inputs and atomic usage reservation.
 - [x] M1 backend skeleton: FastAPI app + settings, Postgres models + Alembic, PayPal client, CI
       (branch `sahil`, not merged).
@@ -85,6 +86,37 @@ Ask Sahil for the shared sandbox values.
       import the money-path tests without the backend dependencies).
 
 ## Log (newest first)
+
+### 2026-11-02 02:55 IST — Anurag + Claude
+- Removed the `<name>/<task>` branch option from `AGENTS.md` to match the fixed `sahil` and `anurag` branch names and avoid the name clash.
+- Files: `AGENTS.md`, `CONTEXT.md`.
+- No tests were run; this was a documentation-only update.
+
+### 2026-11-02 02:54 IST — Anurag + Claude
+- Updated Rule 8 and `AGENTS.md` to name the existing `sahil` and `anurag` branches; left historical log wording unchanged.
+- Files: `CONTEXT.md`, `AGENTS.md`.
+
+### 2026-11-02 02:51 IST — Anurag + Claude
+- Changed the mandates and audit Next up branch labels to the existing `anurag` branch.
+- Files: `CONTEXT.md`.
+
+### 2026-11-02 02:49 IST — Anurag + Claude
+- Fixed Ruff CI errors in `backend/tests/test_policy.py`: sorted imports, used `datetime.UTC`, and wrapped the long parametrization line.
+- Verified the original file had three Ruff errors under Sahil's Ruff 0.17.3 rule set; the updated file passes, and all 109 policy tests pass.
+- Pushed commit `c898c39` to `origin/anurag` and fast-forwarded `main` to include it.
+- Files: `backend/tests/test_policy.py`, `CONTEXT.md`.
+
+### 2026-11-02 02:41 IST — Anurag + Claude
+- Integrated Sahil's backend handoff update from `origin/main` with the policy documentation merge; retained the backend status, environment variable names, and Claude Code instructions.
+- README test instructions and D12 exact-budget decision are now on `main`; the contracts task still needs the velocity-window definition for `recent_payment_count`.
+- Files: `CONTEXT.md`, `CLAUDE.md`.
+- No tests were run; this integration contains documentation changes only.
+
+### 2026-11-02 02:40 IST — Anurag + Claude
+- Merged `origin/anurag` into `main`; README test instructions and D12 exact-budget decision are now on `main`.
+- Updated the `docs/CONTRACTS.md` next step to define `recent_payment_count` from payments inside the velocity window.
+- Files: `README.md`, `docs/DECISIONS.md`, `CONTEXT.md`.
+- No tests were run; the merge contains documentation changes only.
 
 ### 2026-11-02 02:40 IST — Sahil + Claude
 - Branch `sahil` (pushed, not merged): backend skeleton in `backend/` (uv project, Python 3.12) with
