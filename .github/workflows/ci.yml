@@ -1,0 +1,21 @@
+name: ci
+
+on:
+  push:
+    branches: [main, sahil, anurag]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen --python 3.12
+      - name: Lint (money-path modules)
+        run: uv run --frozen ruff check app tests scripts
+      - name: Tests
+        run: uv run --frozen pytest -q

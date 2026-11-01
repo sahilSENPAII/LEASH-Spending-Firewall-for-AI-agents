@@ -51,19 +51,30 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 ## Env vars (names only — values live in each person's local `.env`)
 `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_BASE_URL`, `SANDBOX_BUYER_EMAIL`,
 `MERCHANT_SOUNDHUB_EMAIL`, `MERCHANT_MEGADEALS_EMAIL`, `PLATFORM_MERCHANT_EMAIL`, `GROQ_API_KEY`.
-Coming in M1: `DATABASE_URL` (Neon). Ask Sahil for the shared sandbox values.
+`DATABASE_URL`, `DATABASE_URL_POOLED` (Neon), `PAYPAL_VAULT_ID` (saved demo-buyer wallet token).
+Ask Sahil for the shared sandbox values.
 
 ## In progress
 - Sahil: working directly on `main`; task scope has not been recorded in this handoff yet.
 
 ## Next up
-- [ ] Sahil: install Python 3.12 (`brew install uv && uv python install 3.12`)
-- [ ] Sahil: create Neon project `leash`, add `DATABASE_URL` to `.env`
 - [ ] Add focused unit coverage for `backend/policy.py`, then integrate it into `request_payment` with trusted signature/category/merchant inputs and atomic usage reservation.
 - [ ] M1 backend: FastAPI app + settings, Postgres models + Alembic, PayPal client (from spike 1),
       MCP `request_payment`, audit table, CI, Render deploy
 
 ## Log (newest first)
+
+### 2026-11-02 02:00 IST — Sahil + Claude (branch `sahil`)
+- Backend skeleton in `backend/` (uv project, Python 3.12): `app/config.py` (settings from root `.env`),
+  `app/db.py` (async SQLAlchemy + asyncpg for Neon; strips libpq-only URL params), `app/models.py`
+  (`payments`, `audit_events` — audit has `prev_hash`/`hash` columns ready for Anurag's chain logic),
+  `app/state.py` (payment state machine), `app/paypal.py` (OAuth cache, authorize with vault token,
+  capture, void, PayPal-Request-Id on every write), `app/main.py` (`/health` with DB check).
+- Alembic migration `0001` creates `payments` + `audit_events`. Not yet applied to Neon (run on a laptop).
+- 22 tests passing (state machine, PayPal client mocked with respx, DB URL, health). CI workflow added.
+- `backend/policy.py` untouched; CI lint covers `app tests scripts` only for now.
+- How to run (from `backend/`): `uv sync`, `uv run pytest`, `uv run alembic upgrade head`,
+  `uv run uvicorn app.main:app --reload`, `uv run python scripts/smoke_paypal.py`.
 
 ### 2026-11-02 01:40 IST — Sahil + Claude
 - Added `task-split.md`: even split into two vertical slices (Sahil: money path + Groq judge; Anurag: trust path + XGBoost/SHAP + LangGraph agent), revised schedule from Nov 2, contract list, working rules.
