@@ -47,6 +47,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 - Task split agreed (`task-split.md`): Sahil = money path + Groq judge; Anurag = trust path + XGBoost/SHAP + LangGraph agent.
 - Workflow docs are split: human handoff rules live in `CONTEXT.md`; agent-specific rules live in `AGENTS.md`. Both are maintained directly on `main`; code goes on task branches and through PRs.
 - The policy evaluator's 109 unit tests and exact Decimal budget check are now merged to `main`.
+- README test instructions and D12 are committed on branch `anurag` (`4352e5f`); they are pending main integration.
 - PayPal sandbox works: Vault v3 saved wallet → AUTHORIZE (no buyer click) → capture / void,
   idempotent retries confirmed. All funds settle to the app's own merchant account (D10).
 - MCP stdio server works with Claude Desktop (spike). `mcp` pinned to `<2` (D11).
@@ -66,6 +67,7 @@ Coming in M1: `DATABASE_URL` (Neon). Ask Sahil for the shared sandbox values.
 - [ ] Sahil: install Python 3.12 (`brew install uv && uv python install 3.12`)
 - [ ] Sahil: create Neon project `leash`, add `DATABASE_URL` to `.env`
 - [x] Unit tests and budget fix for `backend/policy.py` (Anurag + Claude; merged into `main` from branch `anurag`, Nov 2).
+- [ ] README test instructions and D12 exact-budget decision (commit `4352e5f` on branch `anurag`; main integration pending).
 - [ ] Both: write and agree `docs/CONTRACTS.md` (Nov 2).
 - [ ] Anurag: mandates — Ed25519 sign/verify, create/revoke, reserve/release budget (branch `anurag/mandates`).
 - [ ] Anurag: hash-chained audit log + `/audit/verify` (branch `anurag/audit`).
@@ -74,6 +76,11 @@ Coming in M1: `DATABASE_URL` (Neon). Ask Sahil for the shared sandbox values.
       MCP `request_payment`, audit table, CI, Render deploy
 
 ## Log (newest first)
+
+### 2026-11-02 02:35 IST — Anurag + Claude
+- Added README test-run instructions and D12 documenting exact money sums and fail-closed rounding on branch `anurag`; pushed commit `4352e5f` to `origin/anurag`.
+- D12 is not yet in `main`, so the key-doc index remains D1–D11 until branch integration. No tests were rerun; this patch changes docs only.
+- Files: `README.md`, `docs/DECISIONS.md`.
 
 ### 2026-11-02 02:23 IST — Anurag + Claude
 - Integrated the coding-agent protocol into `AGENTS.md` and reconciled it with the direct-main rule for `CONTEXT.md` and `AGENTS.md`.
