@@ -1,110 +1,127 @@
 # CONTEXT.md — shared handoff log
 
-Two people work on this repo, each with a coding agent: **Sahil** (branch `sahil`) and
-**Anurag** (branch `anurag`). This file is how each agent picks up where the other left off.
+Two people (Sahil + teammate) and their coding agents work on this repo.
+This file is how each agent picks up exactly where the other left off. **Keep it current.**
 
 ## Rules (for humans and agents)
-1. **This file lives on `main` only.** Code goes on your own branch; context updates go straight to
-   `main`. Never edit `CONTEXT.md` on `sahil` / `anurag` (it causes merge conflicts).
-2. **Before starting work:** `git fetch && git show origin/main:CONTEXT.md` (or pull `main`), and read
-   `docs/DECISIONS.md` and `task-split.md`.
-3. **After every task:** update *your own* status section + add a log entry at the top of the Log, then:
-   ```bash
-   git switch main && git pull
-   # edit CONTEXT.md
-   git commit -am "context: <what you did>" && git push
-   git switch <your-branch>
-   ```
-   Push rejected? `git pull --rebase`, then push again. If it conflicts here, keep both sides.
-4. **Only edit your own status section.** The Log is shared; always add new entries at the top.
-5. Every log entry says **which branch** the code is on and whether it is merged to `main`.
-6. **Breaking change** to a shared function or contract (e.g. `evaluate_payment`, DB tables, decision
-   format): put "⚠ BREAKING" at the start of the entry and in your status section.
-7. Never put secrets here. New env var → add its *name* to `.env.example` and list it below.
+1. **Before starting work:** `git pull`, then read this whole file plus `docs/DECISIONS.md`.
+2. **Claim work:** move the task to "In progress" with your name before you start, commit + push that
+   change right away so the other side doesn't pick the same task.
+3. **After every meaningful change** (a feature, fix, decision, or end of a session): update
+   "Current state", "In progress", "Next up", add a log entry at the **top** of the Log, then push it on
+   `main` (rule 8).
+4. Log entries: date (IST), who (person + agent), what changed, files touched, anything left half-done,
+   anything the other side must know (new env vars, migrations, broken things).
+5. Decisions with trade-offs go in `docs/DECISIONS.md`; concepts and interview notes in `docs/LEARN.md`.
+6. Never put secrets here. New env vars: add the *name* to `.env.example` and mention it in the log.
+7. Small commits, push often. If `git pull` conflicts in this file, keep both sides' entries.
+8. `CONTEXT.md` is edited and pushed directly on `main` (claims, state, log). Code goes on
+   `sahil/<task>` / `anurag/<task>` branches → PR → `main`. Code branches do not touch `CONTEXT.md`.
 
 ## Project in one paragraph
 Leash is a spending firewall for AI agents (PayPal AI Hackathon 2026, deadline Nov 13 1:30 AM IST,
 we submit Nov 12 by 6 PM IST). It is an MCP server between any AI agent and PayPal. Every payment is
-checked against a user-signed mandate → ALLOW / STEP_UP / BLOCK, and logged in a hash-chained audit log.
+checked against a user-signed mandate → ALLOW / STEP-UP / BLOCK, and logged in a hash-chained audit log.
 Stack: Python 3.12, FastAPI, Postgres (Neon), MCP Python SDK 1.x, PayPal REST v2 sandbox, Groq via
-LiteLLM, XGBoost + SHAP, LangGraph + Playwright demo agent, React + AG Grid. Zero spend (D6).
+LiteLLM, XGBoost + SHAP, LangGraph + Playwright demo agent, React + AG Grid. Zero spend (see D6).
 
-Key docs: `task-split.md` (who owns what + schedule), `docs/STAGE1_REQUIREMENTS.md`,
-`docs/DECISIONS.md` (D1–D11), `docs/LEARN.md`, `spikes/README.md`.
+Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1–D11),
+`docs/LEARN.md` (concepts), `spikes/README.md` (how to run the M0 tests).
 
-## Schedule (from task-split.md)
-| Date | Milestone |
-|---|---|
-| Nov 2 | Write `docs/CONTRACTS.md` together |
-| **Nov 4** | **Sync 1:** Claude Desktop pays $1 sandbox through hosted Leash (real policy, mandates, audit) |
-| **Nov 6** | **Sync 2:** attack agent runs end to end and is blocked |
-| **Nov 8** | **Sync 3:** judge + model in orchestrator, frontend on hosted backend |
-| Nov 10 23:59 | Feature freeze |
-| Nov 12 6 PM IST | Submit |
+## Milestones
+| ID | Dates | Goal | Status |
+|---|---|---|---|
+| M0 | Oct 30–31 | Setup + 3 de-risking spikes | **Done** |
+| M1 | Oct 31–Nov 1 | Thin end-to-end flow + deploy: Claude pays $1 sandbox via hosted Leash | Next |
+| M2 | Nov 2–3 | Mandates (Ed25519), policy engine, state machine, idempotency, saga, hash-chained audit | — |
+| M3 | Nov 4–5 | Attack demo: SoundHub + MegaDeals stores, LangGraph agent, injection blocked | — |
+| M4 | Nov 6–7 | Groq intent judge + XGBoost/SHAP anomaly model | — |
+| M5 | Nov 8 | Step-up approval via web page, survives restart | — |
+| M6 | Nov 9–10 | React frontend + AG Grid audit console. **Feature freeze Nov 10 23:59** | — |
+| M7 | Nov 11 | Hardening, README, demo video | — |
+| M8 | Nov 12 | Devpost submission | — |
 
-## Status — Sahil (money path + Groq judge) · branch `sahil`
-- **Done (on `sahil`, not merged):** backend skeleton in `backend/` — uv project (Python 3.12),
-  `app/config.py`, `app/db.py` (async SQLAlchemy + asyncpg for Neon), `app/models.py` (`payments`,
-  `audit_events`), `app/state.py` (payment state machine), `app/paypal.py` (OAuth cache, authorize with
-  saved wallet, capture, void, PayPal-Request-Id on every write), `app/main.py` (`/health` + DB check),
-  Alembic `0001`, `scripts/smoke_paypal.py`, 22 tests, GitHub Actions CI.
-- **Waiting on Sahil's laptop:** `uv run alembic upgrade head` (create tables in Neon), smoke test,
-  `/health` check. (PayPal + Neon are not reachable from Claude's sandbox.)
-- **Next:** MCP `request_payment` + decision orchestrator calling `backend/policy.py`, then Render deploy.
-- **Heads-up for Anurag:** `audit_events` already has `prev_hash` / `hash` columns for your chain logic.
-  `backend/pyproject.toml` sets pytest `testpaths = ["tests"]` (run from `backend/`); your root
-  `pytest.ini` + `backend/requirements-dev.txt` need reconciling at merge — let's settle it at Sync 1.
-
-## Status — Anurag (trust path + XGBoost/SHAP + attack agent) · branch `anurag`
-- **Done:** `backend/policy.py` (on `main`). 109 unit tests + fix for a fail-open budget rounding bug
-  (on `anurag`, not merged).
-- **Next:** mandates (Ed25519 sign/verify, create/revoke, budget tracking), hash-chained audit log.
+## Current state
+- M0 complete. Repo layout exists. `backend/policy.py` now contains a standalone deterministic evaluator; `agent/`, `stores/`, `frontend/`, and `ml/` remain placeholders.
+- The policy evaluator returns ALLOW/BLOCK and relies on the caller for trusted signature verification and category/merchant provenance. It is not yet integrated with MCP or Postgres.
+- Task split agreed (`task-split.md`): Sahil = money path + Groq judge; Anurag = trust path + XGBoost/SHAP + LangGraph agent.
+- Workflow is explicit: `CONTEXT.md` is maintained directly on `main`; code goes on task branches and through PRs.
+- The policy evaluator's 109 unit tests and exact Decimal budget check are now merged to `main`.
+- PayPal sandbox works: Vault v3 saved wallet → AUTHORIZE (no buyer click) → capture / void,
+  idempotent retries confirmed. All funds settle to the app's own merchant account (D10).
+- MCP stdio server works with Claude Desktop (spike). `mcp` pinned to `<2` (D11).
+- PayPal API is **not** reachable from Claude's cloud sandbox: anything calling PayPal must be run on a
+  laptop.
 
 ## Env vars (names only — values live in each person's local `.env`)
-`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_BASE_URL`, `PAYPAL_VAULT_ID`,
-`SANDBOX_BUYER_EMAIL`, `MERCHANT_SOUNDHUB_EMAIL`, `MERCHANT_MEGADEALS_EMAIL`,
-`PLATFORM_MERCHANT_EMAIL`, `GROQ_API_KEY`, `DATABASE_URL`, `DATABASE_URL_POOLED`.
-Ask Sahil for the shared sandbox values (send privately, never in the repo).
+`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_BASE_URL`, `SANDBOX_BUYER_EMAIL`,
+`MERCHANT_SOUNDHUB_EMAIL`, `MERCHANT_MEGADEALS_EMAIL`, `PLATFORM_MERCHANT_EMAIL`, `GROQ_API_KEY`.
+Coming in M1: `DATABASE_URL` (Neon). Ask Sahil for the shared sandbox values.
 
-## Open items (shared)
-- [ ] `docs/CONTRACTS.md` — function shapes between orchestrator (Sahil) and policy/mandates/audit/
-      model (Anurag). Due today.
-- [ ] Reconcile test setup (`backend/pyproject.toml` vs root `pytest.ini`) at Sync 1.
-- [ ] Turn on branch protection for `main` once direct CONTEXT.md pushes are allowed for both of us.
+## In progress
+- Anurag + Claude: write and agree `docs/CONTRACTS.md` (Anurag's half) with Sahil.
+- Sahil + Claude: (Sahil fills in)
+
+## Next up
+- [ ] Sahil: install Python 3.12 (`brew install uv && uv python install 3.12`)
+- [ ] Sahil: create Neon project `leash`, add `DATABASE_URL` to `.env`
+- [x] Unit tests and budget fix for `backend/policy.py` (Anurag + Claude; merged into `main` from branch `anurag`, Nov 2).
+- [ ] Both: write and agree `docs/CONTRACTS.md` (Nov 2).
+- [ ] Anurag: mandates — Ed25519 sign/verify, create/revoke, reserve/release budget (branch `anurag/mandates`).
+- [ ] Anurag: hash-chained audit log + `/audit/verify` (branch `anurag/audit`).
+- [ ] Integrate `policy.py` into `request_payment` with trusted signature/category/merchant inputs and atomic usage reservation.
+- [ ] M1 backend: FastAPI app + settings, Postgres models + Alembic, PayPal client (from spike 1),
+      MCP `request_payment`, audit table, CI, Render deploy
 
 ## Log (newest first)
 
-### 2026-11-02 02:05 IST — Sahil + Claude
-- Restructured this file: it now lives on `main` only, with per-person status sections (rules above).
-- Branch `sahil` (not merged): backend skeleton, Neon DB layer, payment state machine, PayPal client,
-  `/health`, Alembic `0001`, smoke script, 22 tests, CI. `PAYPAL_VAULT_ID` added to `.env.example`.
-- Neon project `leash` created (AWS us-east-1); Python 3.12 installed via uv.
+### 2026-11-02 02:13 IST — Anurag + Claude
+- Added rule 8: `CONTEXT.md` is updated directly on `main`; code changes stay on task branches and go through PRs.
+- Updated rule 3 and aligned `AGENTS.md` and `CLAUDE.md` with the new workflow.
+- Files: `CONTEXT.md`, `AGENTS.md`, `CLAUDE.md`.
+
+### 2026-11-02 02:06 IST — Anurag + Claude
+- Merged `origin/anurag` into `main`; resolved the `CONTEXT.md` conflict by retaining the task split and both branches' dated handoff entries.
+- The merge brings the policy budget-rounding fix, 109 unit tests, pytest config, dev requirements, and learning notes into `main`.
+- Policy merge is complete; the next shared contract task is `docs/CONTRACTS.md`.
+- Files: `CONTEXT.md`, `backend/policy.py`, `backend/tests/test_policy.py`, `backend/requirements-dev.txt`, `pytest.ini`, `docs/LEARN.md`.
+
+### 2026-11-02 02:00 IST — Anurag + Claude
+- Updated `CONTEXT.md` on `main` after pulling the task-split update; retained the Sahil and Anurag handoff entries and recorded the policy tests as complete on branch `anurag`.
+- Adopted the split: Anurag owns policy engine, mandates, audit log, XGBoost + SHAP, LangGraph attack agent, AG Grid console, demo video.
+- New tasks go on `sahil/<task>` or `anurag/<task>` branches with a PR to `main`.
+- Policy implementation and tests remain on `anurag`; merging that branch into `main` via PR is the next step.
+- Files: `CONTEXT.md`.
 
 ### 2026-11-02 01:55 IST — Anurag + Claude
-- Added 109 unit tests for `backend/policy.py`: every rule, boundaries, malformed inputs, timezones,
-  fail-closed on internal error, stable reason order, `PolicyDecision` invariants.
-- Fixed a fail-open bug in the budget check (Decimal context rounding could let a fully spent mandate
-  ALLOW); now exact context, raises on rounding → BLOCK.
-- Added `pytest.ini` (repo root) and `backend/requirements-dev.txt`.
-- Files: `backend/policy.py`, `backend/tests/test_policy.py`, `pytest.ini`,
-  `backend/requirements-dev.txt`, `docs/LEARN.md`. Branch `anurag`, not merged.
+- Added 109 unit tests for `backend/policy.py`: every rule, boundaries (exactly at max/budget/count/velocity), malformed inputs, timezones, fail-closed on internal error, stable reason order, `PolicyDecision` invariants.
+- Fixed a fail-open bug in the budget check: `budget_used + amount` used the caller's Decimal context (28 digits by default), so huge values rounded and a fully spent mandate could ALLOW. Now added in an exact context that raises on rounding -> BLOCK. Two tests cover it (both fail on the old code).
+- Added `pytest.ini` (run `pytest` from repo root) and `backend/requirements-dev.txt` (pytest).
+- Files: `backend/policy.py`, `backend/tests/test_policy.py`, `pytest.ini`, `backend/requirements-dev.txt`, `CONTEXT.md`, `docs/LEARN.md`.
+- Branch `anurag`, not merged to `main` yet.
 
 ### 2026-11-02 01:40 IST — Sahil + Claude
-- Added `task-split.md` (on `main`): even split into two vertical slices, schedule from Nov 2, contract
-  list, working rules.
+- Added `task-split.md`: even split into two vertical slices (Sahil: money path + Groq judge; Anurag: trust path + XGBoost/SHAP + LangGraph agent), revised schedule from Nov 2, contract list, working rules.
+- Next: both write `docs/CONTRACTS.md` today. Anurag's `backend/policy.py` stays as the policy engine; tests still needed.
+
+### 2026-11-02 01:35 IST — Anurag + Claude
+- Claimed unit tests for `backend/policy.py`; working on branch `anurag`.
+- Files: `CONTEXT.md`.
 
 ### 2026-10-30 IST — Anurag + Codex
-- Added `backend/policy.py` (on `main`): pure deterministic ALLOW/BLOCK evaluator, fail-closed input
-  validation, reason codes. Needs trusted signature verification + trusted merchant/category data
-  upstream; usage snapshot is read-only, so atomic reservation belongs in the persistence layer.
+- Added `backend/policy.py`, a pure deterministic ALLOW/BLOCK evaluator with fail-closed input validation and reason codes.
+- The evaluator requires trusted upstream signature verification and trusted server-side merchant/category data. Its usage snapshot is read-only; transactional reservation and MCP integration remain pending.
+- No tests were added or run in this change; focused unit coverage remains next.
+- Files: `backend/policy.py`, `CONTEXT.md`.
 
 ### 2026-10-30 03:45 IST — Sahil + Claude
-- Added `CONTEXT.md`, `AGENTS.md`, `CLAUDE.md` so every coding agent reads the context first.
+- Added `CONTEXT.md` (this file) and `AGENTS.md` / `CLAUDE.md` pointers so every coding agent reads it first.
+- Teammate joining with their own coding agent; this file is the handoff point.
 
 ### 2026-10-30 02:55 IST — Sahil + Claude
-- M0 closed. Spikes 1–3 passed (PayPal vault/authorize/capture/void/idempotency, MCP from Claude
-  Desktop, Playwright reads hidden text). D10 (single merchant account), D11 (`mcp<2`).
-  `docs/LEARN.md` added.
+- M0 closed. Spikes 1–3 passed. Added `docs/LEARN.md` (M0 concepts + interview Qs).
+- D10 (single merchant account), D11 (`mcp<2`) recorded.
+- Files: `spikes/*`, `docs/DECISIONS.md`, `docs/LEARN.md`, `.env.example`.
 
 ### 2026-10-30 02:10 IST — Sahil + Claude
-- Repo created; `docs/STAGE1_REQUIREMENTS.md` added. Stage 2 plan agreed.
+- Repo created; `docs/STAGE1_REQUIREMENTS.md` added. Stage 2 plan (scope, milestones, risks) agreed.
