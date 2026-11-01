@@ -20,6 +20,8 @@ class Settings(BaseSettings):
 
     database_url: str = ""
     groq_api_key: str = ""
+    # Base64 Ed25519 private key; the server signs mandates for the demo user. See app/mandates.py.
+    mandate_signing_key: str = ""
 
 
 @lru_cache
