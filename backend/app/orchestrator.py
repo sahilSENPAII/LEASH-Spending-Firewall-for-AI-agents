@@ -8,18 +8,18 @@ import logging
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
-from backend.policy import (
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from app.models import AuditEvent, Payment
+from app.paypal import PayPalClient
+from app.policy import (
     Mandate,
     PaymentRequest,
     UsageSnapshot,
     VelocityPolicy,
     evaluate_payment,
 )
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
-from app.models import AuditEvent, Payment
-from app.paypal import PayPalClient
 from app.state import PaymentStatus, transition
 
 log = logging.getLogger(__name__)

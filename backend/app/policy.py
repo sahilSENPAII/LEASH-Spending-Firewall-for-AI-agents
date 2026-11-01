@@ -26,7 +26,7 @@ Important operational and trust boundaries:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Context, Decimal, Inexact
 from enum import StrEnum
 from typing import TypeGuard
@@ -198,7 +198,7 @@ def _to_utc_datetime(value: object) -> datetime | None:
     ):
         return None
     try:
-        return value.astimezone(timezone.utc)
+        return value.astimezone(UTC)
     except Exception:
         return None
 
@@ -338,7 +338,10 @@ def _evaluate_payment_inner(
         reasons.append(
             PolicyReason(
                 code="invalid_mandate_max_payment_amount",
-                message="Mandate maximum payment amount must be a positive USD Decimal with at most 2 decimal places.",
+                message=(
+                    "Mandate maximum payment amount must be a positive USD Decimal"
+                    " with at most 2 decimal places."
+                ),
             )
         )
 
@@ -349,7 +352,10 @@ def _evaluate_payment_inner(
         reasons.append(
             PolicyReason(
                 code="invalid_mandate_total_budget",
-                message="Mandate total budget must be a positive USD Decimal with at most 2 decimal places.",
+                message=(
+                    "Mandate total budget must be a positive USD Decimal"
+                    " with at most 2 decimal places."
+                ),
             )
         )
 
@@ -425,7 +431,10 @@ def _evaluate_payment_inner(
         reasons.append(
             PolicyReason(
                 code="invalid_request_amount",
-                message="Request amount must be a finite, positive Decimal with at most 2 decimal places.",
+                message=(
+                    "Request amount must be a finite, positive Decimal"
+                    " with at most 2 decimal places."
+                ),
             )
         )
 
@@ -510,7 +519,10 @@ def _evaluate_payment_inner(
         reasons.append(
             PolicyReason(
                 code="invalid_usage_budget_used",
-                message="Usage budget_used must be a nonnegative USD Decimal with at most 2 decimal places.",
+                message=(
+                    "Usage budget_used must be a nonnegative USD Decimal"
+                    " with at most 2 decimal places."
+                ),
             )
         )
     elif (

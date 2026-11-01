@@ -1,4 +1,4 @@
-"""Unit tests for the deterministic policy evaluator (backend/policy.py)."""
+"""Unit tests for the deterministic policy evaluator (app/policy.py)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,8 @@ from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal, localcontext
 
 import pytest
-from backend.policy import (
+
+from app.policy import (
     Mandate,
     PaymentRequest,
     PolicyDecision,

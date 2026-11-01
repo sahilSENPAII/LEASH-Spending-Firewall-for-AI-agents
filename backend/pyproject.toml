@@ -27,7 +27,7 @@ dev = [
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
-pythonpath = [".", ".."]
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100

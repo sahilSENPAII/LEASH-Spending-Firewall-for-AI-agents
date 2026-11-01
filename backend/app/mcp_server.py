@@ -1,7 +1,4 @@
-"""Agent-facing MCP server (stdio). Run from backend/: PYTHONPATH=.. uv run python -m app.mcp_server
-
-PYTHONPATH=.. makes `backend.policy` importable next to `app`, as pytest does via pyproject.
-"""
+"""Agent-facing MCP server (stdio). Run from backend/: uv run python -m app.mcp_server"""
 
 from functools import lru_cache
 

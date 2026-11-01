@@ -20,19 +20,15 @@ docs/      requirements, plan, decisions, LEARN.md
 ```
 
 ## Run tests
-Python 3.12, from the repo root. Create and activate a virtual environment:
+Python 3.12 and [uv](https://docs.astral.sh/uv/), from `backend/`:
 ```bash
-python -m venv .venv
+uv sync
 ```
 ```bash
-source .venv/bin/activate
-```
-On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1` instead. Then:
-```bash
-python -m pip install -r backend/requirements-dev.txt
+uv run pytest
 ```
 ```bash
-python -m pytest
+uv run ruff check app tests scripts
 ```
 
 ## License
