@@ -1,6 +1,6 @@
 """Smoke test the real PayPal client against sandbox (run on your laptop, not in CI).
 
-cd backend && uv run python scripts/smoke_paypal.py
+cd backend && uv run python -m scripts.smoke_paypal
 """
 
 import asyncio
