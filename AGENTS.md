@@ -4,7 +4,8 @@ Read `CONTEXT.md` first, every session. It holds current state, who is working o
 handoff log between the two people on this project.
 
 When you finish a meaningful change or end a session, update `CONTEXT.md` (current state, in progress,
-next up, and a new log entry at the top of the Log) and commit it together with the code, then push.
+next up, and a new log entry at the top of the Log) and push it directly on `main` (see
+`CONTEXT.md` rule 8); code goes on a task branch and a PR.
 
 Also read `docs/DECISIONS.md` before changing architecture. Do not reverse a decision there without
 adding a new entry that explains why.

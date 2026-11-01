@@ -8,13 +8,15 @@ This file is how each agent picks up exactly where the other left off. **Keep it
 2. **Claim work:** move the task to "In progress" with your name before you start, commit + push that
    change right away so the other side doesn't pick the same task.
 3. **After every meaningful change** (a feature, fix, decision, or end of a session): update
-   "Current state", "In progress", "Next up", add a log entry at the **top** of the Log, then commit
-   and push in the same commit as the code.
+   "Current state", "In progress", "Next up", add a log entry at the **top** of the Log, then push it on
+   `main` (rule 8).
 4. Log entries: date (IST), who (person + agent), what changed, files touched, anything left half-done,
    anything the other side must know (new env vars, migrations, broken things).
 5. Decisions with trade-offs go in `docs/DECISIONS.md`; concepts and interview notes in `docs/LEARN.md`.
 6. Never put secrets here. New env vars: add the *name* to `.env.example` and mention it in the log.
 7. Small commits, push often. If `git pull` conflicts in this file, keep both sides' entries.
+8. `CONTEXT.md` is edited and pushed directly on `main` (claims, state, log). Code goes on
+   `sahil/<task>` / `anurag/<task>` branches → PR → `main`. Code branches do not touch `CONTEXT.md`.
 
 ## Project in one paragraph
 Leash is a spending firewall for AI agents (PayPal AI Hackathon 2026, deadline Nov 13 1:30 AM IST,
@@ -43,6 +45,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 - M0 complete. Repo layout exists. `backend/policy.py` now contains a standalone deterministic evaluator; `agent/`, `stores/`, `frontend/`, and `ml/` remain placeholders.
 - The policy evaluator returns ALLOW/BLOCK and relies on the caller for trusted signature verification and category/merchant provenance. It is not yet integrated with MCP or Postgres.
 - Task split agreed (`task-split.md`): Sahil = money path + Groq judge; Anurag = trust path + XGBoost/SHAP + LangGraph agent.
+- Workflow is explicit: `CONTEXT.md` is maintained directly on `main`; code goes on task branches and through PRs.
 - The policy evaluator's 109 unit tests and exact Decimal budget check are now merged to `main`.
 - PayPal sandbox works: Vault v3 saved wallet → AUTHORIZE (no buyer click) → capture / void,
   idempotent retries confirmed. All funds settle to the app's own merchant account (D10).
@@ -71,6 +74,11 @@ Coming in M1: `DATABASE_URL` (Neon). Ask Sahil for the shared sandbox values.
       MCP `request_payment`, audit table, CI, Render deploy
 
 ## Log (newest first)
+
+### 2026-11-02 02:13 IST — Anurag + Claude
+- Added rule 8: `CONTEXT.md` is updated directly on `main`; code changes stay on task branches and go through PRs.
+- Updated rule 3 and aligned `AGENTS.md` and `CLAUDE.md` with the new workflow.
+- Files: `CONTEXT.md`, `AGENTS.md`, `CLAUDE.md`.
 
 ### 2026-11-02 02:06 IST — Anurag + Claude
 - Merged `origin/anurag` into `main`; resolved the `CONTEXT.md` conflict by retaining the task split and both branches' dated handoff entries.
