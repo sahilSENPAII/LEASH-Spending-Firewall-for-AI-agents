@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import dataclasses
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal, localcontext
 
 import pytest
-
 from backend.policy import (
     Mandate,
     PaymentRequest,
@@ -19,7 +18,7 @@ from backend.policy import (
     evaluate_payment,
 )
 
-NOW = datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 11, 2, 12, 0, tzinfo=UTC)
 
 
 def make_request(**overrides) -> PaymentRequest:
@@ -186,7 +185,9 @@ def test_invalid_amount_is_blocked(amount):
     assert_blocked_with(evaluate(request=make_request(amount=amount)), "invalid_request_amount")
 
 
-@pytest.mark.parametrize("amount", [Decimal("0.01"), Decimal("1.230"), Decimal("1E+1"), Decimal("200")])
+@pytest.mark.parametrize(
+    "amount", [Decimal("0.01"), Decimal("1.230"), Decimal("1E+1"), Decimal("200")]
+)
 def test_valid_amount_forms_are_allowed(amount):
     assert evaluate(request=make_request(amount=amount)).is_allowed
 
