@@ -27,13 +27,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Context, Decimal, Inexact
 from enum import StrEnum
 from typing import TypeGuard
 
 SUPPORTED_CURRENCY = "USD"
 MAX_DECIMAL_PLACES = 2
 _HOURS_24 = timedelta(hours=24)
+# Exact arithmetic for budget sums: any rounding raises Inexact instead of
+# silently producing a wrong total (the default context keeps 28 digits).
+_EXACT_CONTEXT = Context(prec=100, traps=[Inexact])
 
 
 class PolicyOutcome(StrEnum):
@@ -169,6 +172,15 @@ def _is_valid_usd_decimal(
         ):
             return False
     return True
+
+
+def _exact_add(left: Decimal, right: Decimal) -> Decimal:
+    """Add two Decimals exactly, independent of the caller's decimal context.
+
+    Raises ``decimal.Inexact`` if the sum cannot be represented exactly; the
+    public entry point turns that into a fail-closed BLOCK.
+    """
+    return _EXACT_CONTEXT.add(left, right)
 
 
 def _to_utc_datetime(value: object) -> datetime | None:
@@ -504,7 +516,7 @@ def _evaluate_payment_inner(
     elif (
         request_amount_valid
         and total_budget_valid
-        and usage.budget_used + request.amount > mandate.total_budget
+        and _exact_add(usage.budget_used, request.amount) > mandate.total_budget
     ):
         reasons.append(
             PolicyReason(

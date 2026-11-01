@@ -43,6 +43,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 - M0 complete. Repo layout exists. `backend/policy.py` now contains a standalone deterministic evaluator; `agent/`, `stores/`, `frontend/`, and `ml/` remain placeholders.
 - The policy evaluator returns ALLOW/BLOCK and relies on the caller for trusted signature verification and category/merchant provenance. It is not yet integrated with MCP or Postgres.
 - Task split agreed (`task-split.md`): Sahil = money path + Groq judge; Anurag = trust path + XGBoost/SHAP + LangGraph agent.
+- The policy evaluator's 109 unit tests and exact Decimal budget check are now merged to `main`.
 - PayPal sandbox works: Vault v3 saved wallet → AUTHORIZE (no buyer click) → capture / void,
   idempotent retries confirmed. All funds settle to the app's own merchant account (D10).
 - MCP stdio server works with Claude Desktop (spike). `mcp` pinned to `<2` (D11).
@@ -55,13 +56,13 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 Coming in M1: `DATABASE_URL` (Neon). Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Claude: merging `anurag` (policy.py tests + budget fix) into `main` via PR; then `docs/CONTRACTS.md` (Anurag's half) with Sahil.
+- Anurag + Claude: write and agree `docs/CONTRACTS.md` (Anurag's half) with Sahil.
 - Sahil + Claude: (Sahil fills in)
 
 ## Next up
 - [ ] Sahil: install Python 3.12 (`brew install uv && uv python install 3.12`)
 - [ ] Sahil: create Neon project `leash`, add `DATABASE_URL` to `.env`
-- [x] Unit tests and budget fix for `backend/policy.py` (Anurag + Claude; completed Nov 2 on branch `anurag`).
+- [x] Unit tests and budget fix for `backend/policy.py` (Anurag + Claude; merged into `main` from branch `anurag`, Nov 2).
 - [ ] Both: write and agree `docs/CONTRACTS.md` (Nov 2).
 - [ ] Anurag: mandates — Ed25519 sign/verify, create/revoke, reserve/release budget (branch `anurag/mandates`).
 - [ ] Anurag: hash-chained audit log + `/audit/verify` (branch `anurag/audit`).
@@ -70,6 +71,12 @@ Coming in M1: `DATABASE_URL` (Neon). Ask Sahil for the shared sandbox values.
       MCP `request_payment`, audit table, CI, Render deploy
 
 ## Log (newest first)
+
+### 2026-11-02 02:06 IST — Anurag + Claude
+- Merged `origin/anurag` into `main`; resolved the `CONTEXT.md` conflict by retaining the task split and both branches' dated handoff entries.
+- The merge brings the policy budget-rounding fix, 109 unit tests, pytest config, dev requirements, and learning notes into `main`.
+- Policy merge is complete; the next shared contract task is `docs/CONTRACTS.md`.
+- Files: `CONTEXT.md`, `backend/policy.py`, `backend/tests/test_policy.py`, `backend/requirements-dev.txt`, `pytest.ini`, `docs/LEARN.md`.
 
 ### 2026-11-02 02:00 IST — Anurag + Claude
 - Updated `CONTEXT.md` on `main` after pulling the task-split update; retained the Sahil and Anurag handoff entries and recorded the policy tests as complete on branch `anurag`.
@@ -88,6 +95,10 @@ Coming in M1: `DATABASE_URL` (Neon). Ask Sahil for the shared sandbox values.
 ### 2026-11-02 01:40 IST — Sahil + Claude
 - Added `task-split.md`: even split into two vertical slices (Sahil: money path + Groq judge; Anurag: trust path + XGBoost/SHAP + LangGraph agent), revised schedule from Nov 2, contract list, working rules.
 - Next: both write `docs/CONTRACTS.md` today. Anurag's `backend/policy.py` stays as the policy engine; tests still needed.
+
+### 2026-11-02 01:35 IST — Anurag + Claude
+- Claimed unit tests for `backend/policy.py`; working on branch `anurag`.
+- Files: `CONTEXT.md`.
 
 ### 2026-10-30 IST — Anurag + Codex
 - Added `backend/policy.py`, a pure deterministic ALLOW/BLOCK evaluator with fail-closed input validation and reason codes.
