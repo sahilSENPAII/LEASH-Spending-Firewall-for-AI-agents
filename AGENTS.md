@@ -1,14 +1,15 @@
 # Instructions for coding agents
 
-Read `CONTEXT.md` first, every session. It holds current state, who is working on what, and the
-handoff log between the two people on this project.
+This file is the source of agent-specific rules. `CLAUDE.md` points here; keep human workflow and handoff in `CONTEXT.md`. Do not duplicate agent rules in `CONTEXT.md` or `CLAUDE.md`.
 
-When you finish a meaningful change or end a session, update `CONTEXT.md` (current state, in progress,
-next up, and a new log entry at the top of the Log) and push it directly on `main` (see
-`CONTEXT.md` rule 8); code goes on a task branch and a PR.
+## Session start
+- Before each session, pull the current branch and read `CONTEXT.md` plus `docs/DECISIONS.md`.
+- Read `docs/DECISIONS.md` before architecture changes. Do not reverse a decision without recording why.
 
-Also read `docs/DECISIONS.md` before changing architecture. Do not reverse a decision there without
-adding a new entry that explains why.
+## Handoff files
+- After meaningful work or at session end, update `CONTEXT.md` directly on `main` with claims, current state, in-progress work, next steps, and a top-of-log entry; push it on `main` per rule 8.
+- When agent instructions change, update `AGENTS.md` directly on `main` and record that in `CONTEXT.md`.
+- Do not edit either `CONTEXT.md` or `AGENTS.md` on a code branch. Code goes on `sahil/<task>` or `anurag/<task>` branches and is submitted through a PR to `main`.
 
 House rules:
 - Python 3.12, FastAPI, Pydantic v2, async SQLAlchemy, Alembic. MCP Python SDK pinned `<2`.
@@ -22,7 +23,9 @@ House rules:
 # Coding agent protocol
 
 ## Hard limits (never break these)
-- Do NOT push, open/close PRs or issues, comment on GitHub, or change any remote. Do NOT add, rename or delete remotes.
+- Do not open or close PRs or issues, comment on GitHub, or change remotes unless the user explicitly asks.
+- Push `CONTEXT.md` and `AGENTS.md` directly to `main` for rule and handoff updates per `CONTEXT.md` rule 8. Push code only to its task branch when explicitly authorized; never push code directly to `main`.
+- Do NOT add, rename or delete remotes.
 - Stop after ONE local commit (or the number of commits I specify) and report back.
 - Stage files by explicit path only. Never use `git add -A` or `git add .`
 - Leave untracked files you didn't create untouched.
@@ -75,7 +78,7 @@ House rules:
 2. Edge-case / call-site reasoning
 3. Failing test output (fix reverted) and passing output
 4. Full module test result and lint/static-check output
-5. `git log -1 --format=fuller` and `git status` (confirm nothing pushed, untracked files untouched)
+5. `git log -1 --format=fuller` and `git status` (report exactly what was pushed; leave unrelated untracked files untouched)
 6. The PR body file contents and the suggested title
 
 ## Leash adaptations (these override the protocol above where they conflict)
@@ -86,5 +89,5 @@ The protocol was written for bug fixes in upstream open-source repos. In this re
 - New features: the smallest design that meets the task. New modules, helpers and test files are allowed. Tests cover the new behaviour and its edge cases; the fail-without-fix proof does not apply.
 - One commit per `CONTEXT.md` task, then stop and report.
 - PR descriptions are only needed when merging a branch into `main` (sync points: Nov 4, 6, 8).
-- After each task, draft the `CONTEXT.md` update (your status section + a log entry). `CONTEXT.md` changes go to `main` only.
+- After each task, update and push `CONTEXT.md` directly on `main` (state, in-progress work, next steps, and a log entry). If agent instructions change, update `AGENTS.md` directly on `main` and record it in `CONTEXT.md`. Neither file goes on code branches.
 - AI disclosure for the hackathon is made once in the README and the Devpost form, not in commits.

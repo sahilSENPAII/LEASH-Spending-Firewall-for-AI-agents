@@ -1,12 +1,11 @@
 # CONTEXT.md — shared handoff log
 
-Two people (Sahil + teammate) and their coding agents work on this repo.
-This file is how each agent picks up exactly where the other left off. **Keep it current.**
+Two people (Sahil + teammate) work on this repo. This is their shared handoff log. **Keep it current.**
 
-## Rules (for humans and agents)
+## Human rules
 1. **Before starting work:** `git pull`, then read this whole file plus `docs/DECISIONS.md`.
-2. **Claim work:** move the task to "In progress" with your name before you start, commit + push that
-   change right away so the other side doesn't pick the same task.
+2. **Claim work:** move the task to "In progress" with your name before you start, then push the
+   claim on `main` so the other side doesn't pick the same task.
 3. **After every meaningful change** (a feature, fix, decision, or end of a session): update
    "Current state", "In progress", "Next up", add a log entry at the **top** of the Log, then push it on
    `main` (rule 8).
@@ -15,8 +14,9 @@ This file is how each agent picks up exactly where the other left off. **Keep it
 5. Decisions with trade-offs go in `docs/DECISIONS.md`; concepts and interview notes in `docs/LEARN.md`.
 6. Never put secrets here. New env vars: add the *name* to `.env.example` and mention it in the log.
 7. Small commits, push often. If `git pull` conflicts in this file, keep both sides' entries.
-8. `CONTEXT.md` is edited and pushed directly on `main` (claims, state, log). Code goes on
-   `sahil/<task>` / `anurag/<task>` branches → PR → `main`. Code branches do not touch `CONTEXT.md`.
+8. `CONTEXT.md` (human handoff) and `AGENTS.md` (agent instructions) are edited and pushed
+   directly on `main`. Code goes on `sahil/<task>` / `anurag/<task>` branches → PR → `main`. Code
+   branches do not touch `CONTEXT.md` or `AGENTS.md`.
 
 ## Project in one paragraph
 Leash is a spending firewall for AI agents (PayPal AI Hackathon 2026, deadline Nov 13 1:30 AM IST,
@@ -45,35 +45,71 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 - M0 complete. Repo layout exists. `backend/policy.py` now contains a standalone deterministic evaluator; `agent/`, `stores/`, `frontend/`, and `ml/` remain placeholders.
 - The policy evaluator returns ALLOW/BLOCK and relies on the caller for trusted signature verification and category/merchant provenance. It is not yet integrated with MCP or Postgres.
 - Task split agreed (`task-split.md`): Sahil = money path + Groq judge; Anurag = trust path + XGBoost/SHAP + LangGraph agent.
-- Workflow is explicit: `CONTEXT.md` is maintained directly on `main`; code goes on task branches and through PRs.
+- Workflow docs are split: human handoff rules live in `CONTEXT.md`; agent-specific rules live in `AGENTS.md`. Both are maintained directly on `main`; code goes on task branches and through PRs.
 - The policy evaluator's 109 unit tests and exact Decimal budget check are now merged to `main`.
+- README test instructions and D12 are committed on branch `anurag` (`4352e5f`); they are pending main integration.
 - PayPal sandbox works: Vault v3 saved wallet → AUTHORIZE (no buyer click) → capture / void,
   idempotent retries confirmed. All funds settle to the app's own merchant account (D10).
 - MCP stdio server works with Claude Desktop (spike). `mcp` pinned to `<2` (D11).
+- Backend skeleton is on branch `sahil` (not merged): `backend/app/` (config, async Neon DB, payments +
+  audit_events models, payment state machine, PayPal client), `/health`, Alembic `0001`, CI. Verified on
+  Sahil's laptop: `/health` returns db ok, tables migrated in Neon, real sandbox authorize -> capture,
+  idempotent retry and void all pass through `app/paypal.py`.
+- Run backend tests from `backend/`: `uv run pytest -q` (131 pass: money path + policy).
 - PayPal API is **not** reachable from Claude's cloud sandbox: anything calling PayPal must be run on a
   laptop.
 
 ## Env vars (names only — values live in each person's local `.env`)
 `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_BASE_URL`, `SANDBOX_BUYER_EMAIL`,
-`MERCHANT_SOUNDHUB_EMAIL`, `MERCHANT_MEGADEALS_EMAIL`, `PLATFORM_MERCHANT_EMAIL`, `GROQ_API_KEY`.
-Coming in M1: `DATABASE_URL` (Neon). Ask Sahil for the shared sandbox values.
+`MERCHANT_SOUNDHUB_EMAIL`, `MERCHANT_MEGADEALS_EMAIL`, `PLATFORM_MERCHANT_EMAIL`, `GROQ_API_KEY`,
+`PAYPAL_VAULT_ID` (saved demo-buyer wallet token), `DATABASE_URL`, `DATABASE_URL_POOLED` (Neon).
+Ask Sahil for the shared sandbox values.
 
 ## In progress
 - Anurag + Claude: write and agree `docs/CONTRACTS.md` (Anurag's half) with Sahil.
-- Sahil + Claude: (Sahil fills in)
+- Sahil + Claude: MCP `request_payment` + decision orchestrator calling `backend/policy.py`, PayPal and
+  the audit table (branch `sahil`). Then Render deploy.
 
 ## Next up
-- [ ] Sahil: install Python 3.12 (`brew install uv && uv python install 3.12`)
-- [ ] Sahil: create Neon project `leash`, add `DATABASE_URL` to `.env`
+- [x] Sahil: Python 3.12 via uv; Neon project `leash` (AWS us-east-1), `DATABASE_URL` in `.env`.
 - [x] Unit tests and budget fix for `backend/policy.py` (Anurag + Claude; merged into `main` from branch `anurag`, Nov 2).
+- [ ] README test instructions and D12 exact-budget decision (commit `4352e5f` on branch `anurag`; main integration pending).
 - [ ] Both: write and agree `docs/CONTRACTS.md` (Nov 2).
 - [ ] Anurag: mandates — Ed25519 sign/verify, create/revoke, reserve/release budget (branch `anurag/mandates`).
 - [ ] Anurag: hash-chained audit log + `/audit/verify` (branch `anurag/audit`).
 - [ ] Integrate `policy.py` into `request_payment` with trusted signature/category/merchant inputs and atomic usage reservation.
-- [ ] M1 backend: FastAPI app + settings, Postgres models + Alembic, PayPal client (from spike 1),
-      MCP `request_payment`, audit table, CI, Render deploy
+- [x] M1 backend skeleton: FastAPI app + settings, Postgres models + Alembic, PayPal client, CI
+      (branch `sahil`, not merged).
+- [ ] Sahil: MCP `request_payment` + orchestrator, then Render deploy.
+- [ ] Both: agree how to run tests (Sahil: `uv run pytest` from `backend/`; root `pytest.ini` cannot
+      import the money-path tests without the backend dependencies).
 
 ## Log (newest first)
+
+### 2026-11-02 02:40 IST — Sahil + Claude
+- Branch `sahil` (pushed, not merged): backend skeleton in `backend/` (uv project, Python 3.12) with
+  `app/config.py`, `app/db.py`, `app/models.py`, `app/state.py`, `app/paypal.py`, `app/main.py`,
+  Alembic `0001` (`payments`, `audit_events` with `prev_hash`/`hash` columns for the audit chain),
+  `scripts/smoke_paypal.py`, GitHub Actions CI. Merged `origin/main` into `sahil`.
+- `backend/pyproject.toml` pytest `pythonpath = [".", ".."]` so `backend.policy` and `app` both import.
+- Verified on laptop: `/health` db ok, Neon migrated, sandbox authorize/capture/void + idempotent retry.
+- `CLAUDE.md` now imports `AGENTS.md` with `@AGENTS.md` so Claude Code loads it automatically.
+- New env var names: `PAYPAL_VAULT_ID`, `DATABASE_URL`, `DATABASE_URL_POOLED`.
+
+### 2026-11-02 02:35 IST — Anurag + Claude
+- Added README test-run instructions and D12 documenting exact money sums and fail-closed rounding on branch `anurag`; pushed commit `4352e5f` to `origin/anurag`.
+- D12 is not yet in `main`, so the key-doc index remains D1–D11 until branch integration. No tests were rerun; this patch changes docs only.
+- Files: `README.md`, `docs/DECISIONS.md`.
+
+### 2026-11-02 02:23 IST — Anurag + Claude
+- Integrated the coding-agent protocol into `AGENTS.md` and reconciled it with the direct-main rule for `CONTEXT.md` and `AGENTS.md`.
+- Kept agent-specific guidance in `AGENTS.md`; `CLAUDE.md` is a pointer, while this file carries human workflow and handoff state.
+- Files: `CONTEXT.md`, `AGENTS.md`, `CLAUDE.md`.
+
+### 2026-11-02 02:18 IST — Anurag + Claude
+- Separated human workflow rules in `CONTEXT.md` from agent-specific instructions in `AGENTS.md`; made `CLAUDE.md` point to `AGENTS.md`.
+- Clarified that both `CONTEXT.md` and `AGENTS.md` are updated directly on `main` and code branches do not edit either file.
+- Files: `CONTEXT.md`, `AGENTS.md`, `CLAUDE.md`.
 
 ### 2026-11-02 02:13 IST — Anurag + Claude
 - Added rule 8: `CONTEXT.md` is updated directly on `main`; code changes stay on task branches and go through PRs.
