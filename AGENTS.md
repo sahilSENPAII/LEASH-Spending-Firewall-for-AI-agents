@@ -9,7 +9,7 @@ This file is the source of agent-specific rules. `CLAUDE.md` points here; keep h
 ## Handoff files
 - After meaningful work or at session end, update `CONTEXT.md` directly on `main` with claims, current state, in-progress work, next steps, and a top-of-log entry; push it on `main` per rule 8.
 - When agent instructions change, update `AGENTS.md` directly on `main` and record that in `CONTEXT.md`.
-- Do not edit either `CONTEXT.md` or `AGENTS.md` on a code branch. Code goes on `sahil/<task>` or `anurag/<task>` branches and is submitted through a PR to `main`.
+- Do not edit either `CONTEXT.md` or `AGENTS.md` on a code branch. Code goes on the `sahil` / `anurag` branches → PR → `main`.
 
 House rules:
 - Python 3.12, FastAPI, Pydantic v2, async SQLAlchemy, Alembic. MCP Python SDK pinned `<2`.

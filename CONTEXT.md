@@ -15,7 +15,7 @@ Two people (Sahil + teammate) work on this repo. This is their shared handoff lo
 6. Never put secrets here. New env vars: add the *name* to `.env.example` and mention it in the log.
 7. Small commits, push often. If `git pull` conflicts in this file, keep both sides' entries.
 8. `CONTEXT.md` (human handoff) and `AGENTS.md` (agent instructions) are edited and pushed
-   directly on `main`. Code goes on `sahil/<task>` / `anurag/<task>` branches → PR → `main`. Code
+   directly on `main`. Code goes on the `sahil` / `anurag` branches → PR → `main`. Code
    branches do not touch `CONTEXT.md` or `AGENTS.md`.
 
 ## Project in one paragraph
@@ -86,6 +86,10 @@ Ask Sahil for the shared sandbox values.
       import the money-path tests without the backend dependencies).
 
 ## Log (newest first)
+
+### 2026-11-02 02:54 IST — Anurag + Claude
+- Updated Rule 8 and `AGENTS.md` to name the existing `sahil` and `anurag` branches; left historical log wording unchanged.
+- Files: `CONTEXT.md`, `AGENTS.md`.
 
 ### 2026-11-02 02:51 IST — Anurag + Claude
 - Changed the mandates and audit Next up branch labels to the existing `anurag` branch.
