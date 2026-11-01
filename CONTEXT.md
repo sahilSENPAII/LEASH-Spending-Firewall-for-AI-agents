@@ -49,6 +49,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 - The policy evaluator's 109 unit tests and exact Decimal budget check are now merged to `main`.
 - `backend/tests/test_policy.py` passes Sahil's Ruff 0.17.3 CI rules; the lint fix is merged to `main`.
 - README test instructions and D12's exact-budget decision are now merged into `main` from `anurag`.
+- `docs/CONTRACTS.md` (Anurag's trust-path half, marked draft) is merged to `main`; Sahil's section 5 and answers to the four open questions are pending.
 - PayPal sandbox works: Vault v3 saved wallet → AUTHORIZE (no buyer click) → capture / void,
   idempotent retries confirmed. All funds settle to the app's own merchant account (D10).
 - MCP stdio server works with Claude Desktop (spike). `mcp` pinned to `<2` (D11).
@@ -67,7 +68,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Claude: write and agree `docs/CONTRACTS.md` (Anurag's half) with Sahil.
+- Anurag + Claude: mandates part 1 on `anurag` — canonical JSON + Ed25519 sign/verify of mandate terms, `verify_mandate` (no DB yet). Sahil to review `docs/CONTRACTS.md`.
 - Sahil + Claude: MCP `request_payment` + decision orchestrator calling `backend/policy.py`, PayPal and
   the audit table (branch `sahil`). Then Render deploy.
 
@@ -75,10 +76,10 @@ Ask Sahil for the shared sandbox values.
 - [x] Sahil: Python 3.12 via uv; Neon project `leash` (AWS us-east-1), `DATABASE_URL` in `.env`.
 - [x] Unit tests and budget fix for `backend/policy.py` (Anurag + Claude; merged into `main` from branch `anurag`, Nov 2).
 - [x] README test instructions and D12 exact-budget decision (merged from `anurag` into `main`, Nov 2).
-- [ ] Both: write and agree `docs/CONTRACTS.md` (Nov 2), including that usage/reservation code computes `recent_payment_count` from payments inside the velocity window.
+- [ ] Both: review and agree `docs/CONTRACTS.md` (Nov 2), including that usage/reservation code computes `recent_payment_count` from payments inside the velocity window; Sahil to fill section 5 and answer four open questions.
 - [ ] Anurag: mandates — Ed25519 sign/verify, create/revoke, reserve/release budget (branch `anurag`).
 - [ ] Anurag: hash-chained audit log + `/audit/verify` (branch `anurag`).
-- [ ] Integrate `policy.py` into `request_payment` with trusted signature/category/merchant inputs and atomic usage reservation.
+- [ ] Sahil: orchestrator calls `check_and_reserve` / `release_budget` / `append_audit` per `docs/CONTRACTS.md`.
 - [x] M1 backend skeleton: FastAPI app + settings, Postgres models + Alembic, PayPal client, CI
       (branch `sahil`, not merged).
 - [ ] Sahil: MCP `request_payment` + orchestrator, then Render deploy.
@@ -86,6 +87,17 @@ Ask Sahil for the shared sandbox values.
       import the money-path tests without the backend dependencies).
 
 ## Log (newest first)
+
+### 2026-11-02 03:05 IST — Anurag + Claude
+- Merged `anurag` into `main`: `docs/CONTRACTS.md` draft (Anurag's half). Still a draft until Sahil fills section 5 and answers the open questions.
+- Claimed mandates part 1: canonical JSON + Ed25519 sign/verify, `verify_mandate`. DB parts (mandates table, `budget_holds`, migration 0002, `check_and_reserve`) wait for `sahil` to merge.
+- Files: `docs/CONTRACTS.md`.
+
+### 2026-11-02 03:01 IST — Anurag + Claude
+- Drafted Anurag's trust-path half of `docs/CONTRACTS.md` on branch `anurag`: mandate signatures, atomic budget holds, audit-chain functions, and anomaly-model shapes.
+- Waiting for Sahil to fill section 5 and answer four open questions before the contract is agreed.
+- Files: `docs/CONTRACTS.md`.
+- No tests were run; this task changed documentation only.
 
 ### 2026-11-02 02:55 IST — Anurag + Claude
 - Removed the `<name>/<task>` branch option from `AGENTS.md` to match the fixed `sahil` and `anurag` branch names and avoid the name clash.
