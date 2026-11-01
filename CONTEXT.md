@@ -74,7 +74,7 @@ Ask Sahil for the shared sandbox values.
 - [x] Unit tests and budget fix for `backend/policy.py` (Anurag + Claude; merged into `main` from branch `anurag`, Nov 2).
 - [x] README test instructions and D12 exact-budget decision (merged from `anurag` into `main`, Nov 2).
 - [x] Both: agree `docs/CONTRACTS.md` (Nov 2). Sahil: section 5 + `payment.blocked`.
-- [x] Sahil: `sahil` branch merged into `main` (Nov 2; remote branch tips match).
+- [x] Sahil: `sahil` branch merged into `main` (Nov 2).
 - [ ] Anurag: move `policy.py` (+ mandates, canonical) into `backend/app/`, drop root `pytest.ini`, add `cryptography` to `pyproject.toml`/`uv.lock`. Tests: `uv run pytest` from `backend/`.
 - [ ] Sahil: merchant/category config (server-side, never from the agent).
 - [ ] Anurag: mandates — Ed25519 sign/verify, create/revoke, reserve/release budget (branch `anurag`).
@@ -86,6 +86,10 @@ Ask Sahil for the shared sandbox values.
 - [ ] Sahil: Render deploy.
 
 ## Log (newest first)
+
+### 2026-11-02 03:32 IST — Anurag + Claude
+- Removed the stale “remote branch tips match” note from the current Sahil merge checklist; Sahil's code remains merged into `main`.
+- Files: `CONTEXT.md`.
 
 ### 2026-11-02 03:31 IST — Anurag + Claude
 - Sahil agreed the contract: all 4 open questions yes; `check_and_reserve`, release points, audit `now`, no floats. Added `payment.blocked` (Sahil to add in section 5).
