@@ -1,21 +1,93 @@
 # Instructions for coding agents
 
-This file is the source of agent-specific repository rules. `CLAUDE.md` is an entry point to this file. Do not duplicate these rules in `CONTEXT.md` or `CLAUDE.md`.
+This file is the source of agent-specific rules. `CLAUDE.md` points here; keep human workflow and handoff in `CONTEXT.md`. Do not duplicate agent rules in `CONTEXT.md` or `CLAUDE.md`.
 
 ## Session start
-- Pull the current branch before work.
-- Read `CONTEXT.md` and `docs/DECISIONS.md` at the start of each session. `CONTEXT.md` contains the human-maintained project status, handoff, and task ownership.
+- Before each session, pull the current branch and read `CONTEXT.md` plus `docs/DECISIONS.md`.
 - Read `docs/DECISIONS.md` before architecture changes. Do not reverse a decision without recording why.
 
-## Project handoff and files
-- Keep agent-specific instructions in this file; keep human workflow and project handoff in `CONTEXT.md`.
-- After meaningful work or at session end, update `CONTEXT.md` directly on `main` with claims, current state, in-progress work, next steps, and a top-of-log entry; push it to `main` per `CONTEXT.md` rule 8.
-- When agent instructions change, update `AGENTS.md` directly on `main` and record the change in `CONTEXT.md`.
-- Do not edit `CONTEXT.md` or `AGENTS.md` on a code branch. Code goes on `sahil/<task>` or `anurag/<task>` branches and is submitted through a PR to `main`.
+## Handoff files
+- After meaningful work or at session end, update `CONTEXT.md` directly on `main` with claims, current state, in-progress work, next steps, and a top-of-log entry; push it on `main` per rule 8.
+- When agent instructions change, update `AGENTS.md` directly on `main` and record that in `CONTEXT.md`.
+- Do not edit either `CONTEXT.md` or `AGENTS.md` on a code branch. Code goes on `sahil/<task>` or `anurag/<task>` branches and is submitted through a PR to `main`.
 
-## Coding rules
+House rules:
 - Python 3.12, FastAPI, Pydantic v2, async SQLAlchemy, Alembic. MCP Python SDK pinned `<2`.
 - Zero spend: free tiers and hackathon credits only. Never add paid services.
-- Secrets only in `.env` (git-ignored). New environment variables must be named in `.env.example` and recorded in `CONTEXT.md`.
+- Secrets only in `.env` (git-ignored). New env var → add its name to `.env.example` + log it.
 - Fail safe: any check error → BLOCK or STEP_UP, never ALLOW.
-- Keep code commits small and clear. Write tests with the code; submit code changes through a task-branch PR, not a direct push to `main`.
+- Small commits with clear messages. Write tests with the code.
+
+---
+
+# Coding agent protocol
+
+## Hard limits (never break these)
+- Do not open or close PRs or issues, comment on GitHub, or change remotes unless the user explicitly asks.
+- Push `CONTEXT.md` and `AGENTS.md` directly to `main` for rule and handoff updates per `CONTEXT.md` rule 8. Push code only to its task branch when explicitly authorized; never push code directly to `main`.
+- Do NOT add, rename or delete remotes.
+- Stop after ONE local commit (or the number of commits I specify) and report back.
+- Stage files by explicit path only. Never use `git add -A` or `git add .`
+- Leave untracked files you didn't create untouched.
+- Do NOT build Docker images, download large toolchains, or install global packages without asking. My disk space is limited.
+- If something blocks you (missing remote, unclear requirement, failing setup), stop and tell me. Don't work around it.
+
+## Before writing code
+- Read the repo's contributor docs first (AGENTS.md, CLAUDE.md, CONTRIBUTING, PR template, any agent skills) and follow them over these rules where they conflict.
+- Check for existing issues and PRs covering the same change. Stop if one exists.
+- Branch fresh from the upstream default branch, not from another feature branch.
+- Confirm the bug still exists on upstream before changing anything.
+- Read the surrounding code and any earlier fixes in the same area (`git log` / `git blame`) and follow their pattern.
+
+## Code
+- Write like a professional already working in this codebase: match its style, naming, structure and test patterns exactly.
+- Smallest possible diff that fully fixes the problem. No refactors, reformatting, renames, new helpers or unrelated changes.
+- Comments only for genuinely non-obvious constraints. No narrating comments.
+- No emojis anywhere: code, commits, PR text.
+- Follow the project's spelling and terminology conventions.
+- Before finalizing, reason through every call site and edge case the change touches, and list that reasoning in the report.
+
+## Tests
+- Add tests to the existing test module for that code, in its style. Don't create new test files unless the project's layout requires it.
+- Every new test case must fail without the fix and pass with it. Prove both: show the failing run with the fix reverted and the passing run with it.
+- Cover exactly what the change affects. Don't add cases that pass with or without the fix.
+- Run the whole affected test module afterwards. If unrelated tests fail, check whether they also fail without your change (for example, stale local DB state) and report it.
+- Run the project's lint/static checks on the changed files. If a hook needs heavy infrastructure, skip only that hook and say so.
+
+## Commit
+- Plain imperative subject, under 70 characters, describing the user-facing impact. No "fix:"/"feat:" prefixes, no issue numbers in the subject.
+- Body: 1-3 lines explaining WHY.
+- NO Co-Authored-By, "Generated with", or any AI attribution trailer. Verify with `git log -1 --format=%B`.
+- Use my existing git identity. If none is set, stop and ask.
+
+## PR description (draft only, never post)
+- Write it to a gitignored file in the repo (or the scratch location I name), body only, no title line.
+- Follow the project's PR template.
+- Structure: closes/related line at the top, then Problem / Cause / Fix / Testing.
+- Testing section: the new tests, that they fail without the fix and pass with it, the full module result, and any checks skipped and why.
+- Include the project's required AI-disclosure section exactly as its guidelines ask.
+- Concise, plain, factual. No filler, no hype, no AI-sounding phrasing. Don't tag or mention individuals.
+- Suggest a PR title focused on user impact.
+
+## Writing style (code, commits, PR text, replies)
+- Short sentences, plain words, no buzzwords.
+- State only what you verified. Label anything inferred or not run.
+
+## Final report (then STOP)
+1. Full diff against upstream
+2. Edge-case / call-site reasoning
+3. Failing test output (fix reverted) and passing output
+4. Full module test result and lint/static-check output
+5. `git log -1 --format=fuller` and `git status` (report exactly what was pushed; leave unrelated untracked files untouched)
+6. The PR body file contents and the suggested title
+
+## Leash adaptations (these override the protocol above where they conflict)
+The protocol was written for bug fixes in upstream open-source repos. In this repo:
+- "Existing issues and PRs" means `CONTEXT.md` claims and the other person's branch. Stop if the task is already claimed.
+- Work on your own branch (`sahil` or `anurag`, or `<name>/<task>`). Merge `origin/main` into it before starting a task. "Upstream default branch" means `origin/main`.
+- Bug fixes: the protocol applies as written (confirm the bug, smallest diff, tests fail without the fix and pass with it).
+- New features: the smallest design that meets the task. New modules, helpers and test files are allowed. Tests cover the new behaviour and its edge cases; the fail-without-fix proof does not apply.
+- One commit per `CONTEXT.md` task, then stop and report.
+- PR descriptions are only needed when merging a branch into `main` (sync points: Nov 4, 6, 8).
+- After each task, update and push `CONTEXT.md` directly on `main` (state, in-progress work, next steps, and a log entry). If agent instructions change, update `AGENTS.md` directly on `main` and record it in `CONTEXT.md`. Neither file goes on code branches.
+- AI disclosure for the hackathon is made once in the README and the Devpost form, not in commits.

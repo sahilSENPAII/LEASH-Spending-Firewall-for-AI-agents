@@ -75,6 +75,11 @@ Coming in M1: `DATABASE_URL` (Neon). Ask Sahil for the shared sandbox values.
 
 ## Log (newest first)
 
+### 2026-11-02 02:23 IST — Anurag + Claude
+- Integrated the coding-agent protocol into `AGENTS.md` and reconciled it with the direct-main rule for `CONTEXT.md` and `AGENTS.md`.
+- Kept agent-specific guidance in `AGENTS.md`; `CLAUDE.md` is a pointer, while this file carries human workflow and handoff state.
+- Files: `CONTEXT.md`, `AGENTS.md`, `CLAUDE.md`.
+
 ### 2026-11-02 02:18 IST — Anurag + Claude
 - Separated human workflow rules in `CONTEXT.md` from agent-specific instructions in `AGENTS.md`; made `CLAUDE.md` point to `AGENTS.md`.
 - Clarified that both `CONTEXT.md` and `AGENTS.md` are updated directly on `main` and code branches do not edit either file.
