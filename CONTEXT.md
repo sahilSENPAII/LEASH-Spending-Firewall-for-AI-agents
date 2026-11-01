@@ -50,7 +50,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 - `backend/tests/test_policy.py` passes Sahil's Ruff 0.17.3 CI rules; the lint fix is merged to `main`.
 - README test instructions and D12's exact-budget decision are now merged into `main` from `anurag`.
 - Contracts agreed (Nov 2): Sahil said yes to all 4 open questions and the `check_and_reserve` design. Sahil adds section 5 and `payment.blocked` to `docs/CONTRACTS.md`.
-- Sahil: real Claude Desktop -> orchestrator -> PayPal sandbox $1 payment to SoundHub captured; MegaDeals and $250 blocked by `policy.py` (on `sahil`, 149 tests pass).
+- Sahil: real Claude Desktop -> orchestrator -> PayPal sandbox $1 payment to SoundHub captured; MegaDeals and $250 blocked by `policy.py` (149 tests pass).
 - PayPal sandbox works: Vault v3 saved wallet → AUTHORIZE (no buyer click) → capture / void,
   idempotent retries confirmed. All funds settle to the app's own merchant account (D10).
 - MCP stdio server works with Claude Desktop (spike). `mcp` pinned to `<2` (D11).
@@ -66,7 +66,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Claude: mandates part 1 on `anurag` — canonical JSON + Ed25519 sign/verify of mandate terms, `verify_mandate` (no DB yet).
+- Anurag + Claude: move `policy.py` into `backend/app/` (then mandates part 1) on `anurag`.
 - Sahil + Claude: add section 5 and `payment.blocked` to `docs/CONTRACTS.md`.
 
 ## Next up
@@ -76,7 +76,7 @@ Ask Sahil for the shared sandbox values.
 - [x] Both: agree `docs/CONTRACTS.md` (Nov 2). Sahil: section 5 + `payment.blocked`.
 - [x] Sahil: `sahil` branch merged into `main` (Nov 2).
 - [ ] Anurag: move `policy.py` (+ mandates, canonical) into `backend/app/`, drop root `pytest.ini`, add `cryptography` to `pyproject.toml`/`uv.lock`. Tests: `uv run pytest` from `backend/`.
-- [ ] Sahil: merchant/category config (server-side, never from the agent).
+- [x] Sahil: merchant/category config (server-side, never from the agent; `MERCHANT_CATEGORIES` in `backend/app/orchestrator.py`).
 - [ ] Anurag: mandates — Ed25519 sign/verify, create/revoke, reserve/release budget (branch `anurag`).
 - [ ] Anurag: hash-chained audit log + `/audit/verify` (branch `anurag`).
 - [ ] Sahil: orchestrator calls `check_and_reserve` / `release_budget` / `append_audit` per `docs/CONTRACTS.md`.
@@ -86,6 +86,11 @@ Ask Sahil for the shared sandbox values.
 - [ ] Sahil: Render deploy.
 
 ## Log (newest first)
+
+### 2026-11-02 03:34 IST — Anurag + Claude
+- Updated the payment status to reflect it is on `main`, set Anurag's in-progress task to moving `policy.py` into `backend/app/`, and marked Sahil's merchant/category map complete.
+- Files: `CONTEXT.md`.
+- No tests were run; this was a documentation-only update.
 
 ### 2026-11-02 03:32 IST — Anurag + Claude
 - Removed the stale “remote branch tips match” note from the current Sahil merge checklist; Sahil's code remains merged into `main`.
