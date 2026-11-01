@@ -47,6 +47,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 - Task split agreed (`task-split.md`): Sahil = money path + Groq judge; Anurag = trust path + XGBoost/SHAP + LangGraph agent.
 - Workflow docs are split: human handoff rules live in `CONTEXT.md`; agent-specific rules live in `AGENTS.md`. Both are maintained directly on `main`; code goes on task branches and through PRs.
 - The policy evaluator's 109 unit tests and exact Decimal budget check are now merged to `main`.
+- `backend/tests/test_policy.py` passes Sahil's Ruff 0.17.3 CI rules; the lint fix is merged to `main`.
 - README test instructions and D12's exact-budget decision are now merged into `main` from `anurag`.
 - PayPal sandbox works: Vault v3 saved wallet → AUTHORIZE (no buyer click) → capture / void,
   idempotent retries confirmed. All funds settle to the app's own merchant account (D10).
@@ -85,6 +86,12 @@ Ask Sahil for the shared sandbox values.
       import the money-path tests without the backend dependencies).
 
 ## Log (newest first)
+
+### 2026-11-02 02:49 IST — Anurag + Claude
+- Fixed Ruff CI errors in `backend/tests/test_policy.py`: sorted imports, used `datetime.UTC`, and wrapped the long parametrization line.
+- Verified the original file had three Ruff errors under Sahil's Ruff 0.17.3 rule set; the updated file passes, and all 109 policy tests pass.
+- Pushed commit `c898c39` to `origin/anurag` and fast-forwarded `main` to include it.
+- Files: `backend/tests/test_policy.py`, `CONTEXT.md`.
 
 ### 2026-11-02 02:41 IST — Anurag + Claude
 - Integrated Sahil's backend handoff update from `origin/main` with the policy documentation merge; retained the backend status, environment variable names, and Claude Code instructions.
