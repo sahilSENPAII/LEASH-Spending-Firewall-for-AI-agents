@@ -43,21 +43,19 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 
 ## Current state
 - M0 complete. Repo layout exists. `backend/policy.py` now contains a standalone deterministic evaluator; `agent/`, `stores/`, `frontend/`, and `ml/` remain placeholders.
-- The policy evaluator returns ALLOW/BLOCK and relies on the caller for trusted signature verification and category/merchant provenance. It is not yet integrated with MCP or Postgres.
+- The policy evaluator is integrated into `backend/app/orchestrator.py`, which persists payment and audit state in Postgres. The current flow uses a server-side demo mandate; Ed25519 verification and atomic budget holds remain pending.
 - Task split agreed (`task-split.md`): Sahil = money path + Groq judge; Anurag = trust path + XGBoost/SHAP + LangGraph agent.
 - Workflow docs are split: human handoff rules live in `CONTEXT.md`; agent-specific rules live in `AGENTS.md`. Both are maintained directly on `main`; code goes on task branches and through PRs.
 - The policy evaluator's 109 unit tests and exact Decimal budget check are now merged to `main`.
 - `backend/tests/test_policy.py` passes Sahil's Ruff 0.17.3 CI rules; the lint fix is merged to `main`.
 - README test instructions and D12's exact-budget decision are now merged into `main` from `anurag`.
-- `docs/CONTRACTS.md` (Anurag's trust-path half, marked draft) is merged to `main`; Sahil's section 5 and answers to the four open questions are pending.
+- Contracts agreed (Nov 2): Sahil said yes to all 4 open questions and the `check_and_reserve` design. Sahil adds section 5 and `payment.blocked` to `docs/CONTRACTS.md`.
+- Sahil: real Claude Desktop -> orchestrator -> PayPal sandbox $1 payment to SoundHub captured; MegaDeals and $250 blocked by `policy.py` (on `sahil`, 149 tests pass).
 - PayPal sandbox works: Vault v3 saved wallet → AUTHORIZE (no buyer click) → capture / void,
   idempotent retries confirmed. All funds settle to the app's own merchant account (D10).
 - MCP stdio server works with Claude Desktop (spike). `mcp` pinned to `<2` (D11).
-- Backend skeleton is on branch `sahil` (not merged): `backend/app/` (config, async Neon DB, payments +
-  audit_events models, payment state machine, PayPal client), `/health`, Alembic `0001`, CI. Verified on
-  Sahil's laptop: `/health` returns db ok, tables migrated in Neon, real sandbox authorize -> capture,
-  idempotent retry and void all pass through `app/paypal.py`.
-- Run backend tests from `backend/`: `uv run pytest -q` (131 pass: money path + policy).
+- Sahil's backend app, orchestrator, MCP tool, database models, Alembic `0001`, and CI are merged into `main` from `sahil`.
+- Run backend tests from `backend/`: `uv run pytest` (149 pass: money path, policy, and orchestrator).
 - PayPal API is **not** reachable from Claude's cloud sandbox: anything calling PayPal must be run on a
   laptop.
 
@@ -68,25 +66,33 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Claude: mandates part 1 on `anurag` — canonical JSON + Ed25519 sign/verify of mandate terms, `verify_mandate` (no DB yet). Sahil to review `docs/CONTRACTS.md`.
-- Sahil + Claude: MCP `request_payment` + decision orchestrator calling `backend/policy.py`, PayPal and
-  the audit table (branch `sahil`). Then Render deploy.
+- Anurag + Claude: mandates part 1 on `anurag` — canonical JSON + Ed25519 sign/verify of mandate terms, `verify_mandate` (no DB yet).
+- Sahil + Claude: add section 5 and `payment.blocked` to `docs/CONTRACTS.md`.
 
 ## Next up
 - [x] Sahil: Python 3.12 via uv; Neon project `leash` (AWS us-east-1), `DATABASE_URL` in `.env`.
 - [x] Unit tests and budget fix for `backend/policy.py` (Anurag + Claude; merged into `main` from branch `anurag`, Nov 2).
 - [x] README test instructions and D12 exact-budget decision (merged from `anurag` into `main`, Nov 2).
-- [ ] Both: review and agree `docs/CONTRACTS.md` (Nov 2), including that usage/reservation code computes `recent_payment_count` from payments inside the velocity window; Sahil to fill section 5 and answer four open questions.
+- [x] Both: agree `docs/CONTRACTS.md` (Nov 2). Sahil: section 5 + `payment.blocked`.
+- [x] Sahil: `sahil` branch merged into `main` (Nov 2; remote branch tips match).
+- [ ] Anurag: move `policy.py` (+ mandates, canonical) into `backend/app/`, drop root `pytest.ini`, add `cryptography` to `pyproject.toml`/`uv.lock`. Tests: `uv run pytest` from `backend/`.
+- [ ] Sahil: merchant/category config (server-side, never from the agent).
 - [ ] Anurag: mandates — Ed25519 sign/verify, create/revoke, reserve/release budget (branch `anurag`).
 - [ ] Anurag: hash-chained audit log + `/audit/verify` (branch `anurag`).
 - [ ] Sahil: orchestrator calls `check_and_reserve` / `release_budget` / `append_audit` per `docs/CONTRACTS.md`.
 - [x] M1 backend skeleton: FastAPI app + settings, Postgres models + Alembic, PayPal client, CI
-      (branch `sahil`, not merged).
-- [ ] Sahil: MCP `request_payment` + orchestrator, then Render deploy.
-- [ ] Both: agree how to run tests (Sahil: `uv run pytest` from `backend/`; root `pytest.ini` cannot
-      import the money-path tests without the backend dependencies).
+      (merged into `main` from `sahil`).
+- [x] Sahil: MCP `request_payment` + orchestrator (merged into `main` from `sahil`).
+- [ ] Sahil: Render deploy.
 
 ## Log (newest first)
+
+### 2026-11-02 03:31 IST — Anurag + Claude
+- Sahil agreed the contract: all 4 open questions yes; `check_and_reserve`, release points, audit `now`, no floats. Added `payment.blocked` (Sahil to add in section 5).
+- Decided: trust-path modules move into `backend/app/` after Sahil's merge; test command is `uv run pytest` from `backend/`; `cryptography` goes in `pyproject.toml`.
+- Sahil owns merchant/category config.
+- `sahil` is already merged into `main`; the remote branch tips match.
+- Files: `CONTEXT.md`.
 
 ### 2026-11-02 03:05 IST — Anurag + Claude
 - Merged `anurag` into `main`: `docs/CONTRACTS.md` draft (Anurag's half). Still a draft until Sahil fills section 5 and answers the open questions.
