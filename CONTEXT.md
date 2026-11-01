@@ -43,7 +43,8 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 
 ## Current state
 - M0 complete. Repo layout exists. `backend/app/policy.py` now contains a standalone deterministic evaluator; `agent/`, `stores/`, `frontend/`, and `ml/` remain placeholders.
-- The policy evaluator is integrated into `backend/app/orchestrator.py`, which persists payment and audit state in Postgres. The current flow uses a server-side demo mandate; Ed25519 verification and atomic budget holds remain pending.
+- The policy evaluator is integrated into `backend/app/orchestrator.py`, which persists payment and audit state in Postgres. The current flow still uses a server-side demo mandate; Ed25519 mandate verification exists in `backend/app/mandates.py` but is not wired into the payment flow, and atomic budget holds remain pending.
+- Mandates part 1: `app/canonical.py` (canonical JSON) and `app/mandates.py` (`MandateTerms` including signed `intent`, `MandateRecord` with `budget_used`/`payment_count`, Ed25519 sign/verify, and fail-closed `verify_mandate`). The 202 backend tests pass.
 - Task split agreed (`task-split.md`): Sahil = money path + Groq judge; Anurag = trust path + XGBoost/SHAP + LangGraph agent.
 - Workflow docs are split: human handoff rules live in `CONTEXT.md`; agent-specific rules live in `AGENTS.md`. Both are maintained directly on `main`; code goes on task branches and through PRs.
 - The policy evaluator's 109 unit tests and exact Decimal budget check are now merged to `main`.
@@ -63,11 +64,12 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 ## Env vars (names only — values live in each person's local `.env`)
 `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_BASE_URL`, `SANDBOX_BUYER_EMAIL`,
 `MERCHANT_SOUNDHUB_EMAIL`, `MERCHANT_MEGADEALS_EMAIL`, `PLATFORM_MERCHANT_EMAIL`, `GROQ_API_KEY`,
-`PAYPAL_VAULT_ID` (saved demo-buyer wallet token), `DATABASE_URL`, `DATABASE_URL_POOLED` (Neon).
+`PAYPAL_VAULT_ID` (saved demo-buyer wallet token), `DATABASE_URL`, `DATABASE_URL_POOLED` (Neon),
+`MANDATE_SIGNING_KEY` (base64 Ed25519 private key; generate with `uv run python -m scripts.gen_mandate_key` from `backend/`; each person and Render needs its own key).
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Claude: mandates part 1 on `anurag` — `app/canonical.py`, Ed25519 sign/verify, `verify_mandate` (no DB).
+- Anurag + Claude: mandates part 2 on `anurag` — mandates + `budget_holds` models, migration `0002` (including the agreed one-off `audit_events` wipe), create/revoke/list, `check_and_reserve` / `release_budget`, and velocity settings.
 - Sahil + Claude: update `docs/CONTRACTS.md` paths after the policy move; rename `payment.error` to `payment.failed` in the orchestrator and fix the smoke script run note (`uv run python -m scripts.smoke_paypal`).
 
 ## Next up
@@ -77,9 +79,9 @@ Ask Sahil for the shared sandbox values.
 - [x] Both: agree `docs/CONTRACTS.md` (Nov 2). Sahil: section 5 + `payment.blocked`.
 - [x] Sahil: `sahil` branch merged into `main` (Nov 2).
 - [x] Anurag: move the policy engine to `backend/app/policy.py`; remove root `pytest.ini` and `backend/requirements-dev.txt`; tests and Ruff pass from `backend/`.
-- [ ] Anurag: add `cryptography` to `backend/pyproject.toml` and `uv.lock` for mandate signing.
+- [x] Anurag: add `cryptography` to `backend/pyproject.toml` and `uv.lock` for mandate signing.
 - [x] Sahil: merchant/category config (server-side, never from the agent; `MERCHANT_CATEGORIES` in `backend/app/orchestrator.py`).
-- [ ] Anurag: mandates — Ed25519 sign/verify, create/revoke, reserve/release budget (branch `anurag`).
+- [ ] Anurag: mandates part 2 — database model/migration, create/revoke/list, and reserve/release budget (branch `anurag`).
 - [ ] Anurag: hash-chained audit log + `/audit/verify` (branch `anurag`).
 - [ ] Sahil: orchestrator calls `check_and_reserve` / `release_budget` / `append_audit` per `docs/CONTRACTS.md`.
 - [ ] Sahil: update section 5 paths in `docs/CONTRACTS.md` to `backend/app/policy.py`, `app/mandates.py`, `app/audit.py`.
@@ -91,6 +93,13 @@ Ask Sahil for the shared sandbox values.
 - [ ] Sahil: Render deploy.
 
 ## Log (newest first)
+
+### 2026-11-02 04:25 IST — Anurag + Claude
+- Added canonical JSON and Ed25519 signing/verification for mandate terms, including signed `intent`; `verify_mandate` fails closed. Revocation and usage state remain unsigned.
+- Added `MANDATE_SIGNING_KEY` configuration and a key generator. A local key is stored in ignored `.env`; each person and Render must generate a separate key.
+- Added `cryptography` to the backend dependencies. All 202 tests pass; Ruff and app import checks pass.
+- Pushed `d2a257f` to `anurag` and fast-forwarded it into `main`.
+- Files: `.env.example`, `backend/app/{canonical,config,mandates}.py`, `backend/scripts/gen_mandate_key.py`, `backend/tests/test_{canonical,mandates}.py`, `backend/pyproject.toml`, `backend/uv.lock`, `CONTEXT.md`.
 
 ### 2026-11-02 04:04 IST — Anurag + Claude
 - Moved `backend/policy.py` to `backend/app/policy.py`; updated imports in `orchestrator.py` and `test_policy.py`; removed `PYTHONPATH=..` from `mcp_server.py` and `..` from pytest `pythonpath`.
