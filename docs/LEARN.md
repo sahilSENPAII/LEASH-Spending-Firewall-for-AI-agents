@@ -88,3 +88,33 @@ main attack Leash defends against, and spike 3 proves our demo agent will "see" 
    merchant is onboarded and we act on their behalf.
 6. **Why did you spike before building?**
    To kill the biggest unknowns first. Each spike had a clear pass/fail question and a fallback ready.
+
+---
+
+## Policy tests (Nov 2) — Anurag
+
+### What was built
+`backend/tests/test_policy.py`: 109 pytest cases for the rule checker in `backend/policy.py`.
+They also caught a real bug, now fixed.
+
+### Concepts, in plain words
+**Boundary testing.** Most money bugs sit at the edges, so each limit is tested exactly at the limit
+(must ALLOW) and one step past it (must BLOCK): $200.00 vs $200.01, 3rd payment vs 4th.
+
+**Fail closed.** Bad input (a float amount, a naive datetime, a set instead of a frozenset) or an
+unexpected exception never ALLOWs. The tests feed garbage on purpose and expect BLOCK.
+
+**Why money uses `Decimal`, and why that wasn't enough.** Floats can't store 0.1 exactly, so money is
+`Decimal`. But Decimal arithmetic still rounds to the active *context* precision (28 digits by
+default, and a caller can lower it). `1E+30 + 0.01` rounded back to `1E+30`, so a fully spent
+mandate passed the budget check. Fix: add in a private exact context that raises `Inexact` on any
+rounding; the evaluator turns that into BLOCK. Comparisons (`>`) are always exact, only arithmetic rounds.
+
+### Likely interview questions
+1. **Why not floats for money?** Binary floats can't represent most cents exactly; errors add up.
+   *Follow-up: is Decimal always exact?* No, arithmetic rounds to context precision; we use an exact
+   context that errors instead of rounding.
+2. **How did you test a fail-closed design?** Pass malformed inputs and force an exception inside the
+   evaluator (a Decimal subclass whose comparison raises) and assert BLOCK with `internal_evaluation_error`.
+3. **How do you know a test actually tests the fix?** Ran the new tests against the old code: they fail
+   there and pass after the fix.

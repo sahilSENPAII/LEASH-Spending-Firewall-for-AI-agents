@@ -42,6 +42,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 ## Current state
 - M0 complete. Repo layout exists. `backend/policy.py` now contains a standalone deterministic evaluator; `agent/`, `stores/`, `frontend/`, and `ml/` remain placeholders.
 - The policy evaluator returns ALLOW/BLOCK and relies on the caller for trusted signature verification and category/merchant provenance. It is not yet integrated with MCP or Postgres.
+- `backend/policy.py` has 109 unit tests (`backend/tests/test_policy.py`), all passing. Run: `pip install -r backend/requirements-dev.txt && pytest`.
 - PayPal sandbox works: Vault v3 saved wallet → AUTHORIZE (no buyer click) → capture / void,
   idempotent retries confirmed. All funds settle to the app's own merchant account (D10).
 - MCP stdio server works with Claude Desktop (spike). `mcp` pinned to `<2` (D11).
@@ -54,17 +55,25 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 Coming in M1: `DATABASE_URL` (Neon). Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Claude (branch `anurag`): unit tests for `backend/policy.py`.
+- _(nothing claimed — policy.py tests done on branch `anurag`, waiting to be merged to `main`)_
 - Track A/B split not decided yet.
 
 ## Next up
 - [ ] Sahil: install Python 3.12 (`brew install uv && uv python install 3.12`)
 - [ ] Sahil: create Neon project `leash`, add `DATABASE_URL` to `.env`
-- [ ] Add focused unit coverage for `backend/policy.py`, then integrate it into `request_payment` with trusted signature/category/merchant inputs and atomic usage reservation.
+- [x] Unit tests for `backend/policy.py` (Anurag + Claude, Nov 2).
+- [ ] Integrate `policy.py` into `request_payment` with trusted signature/category/merchant inputs and atomic usage reservation.
 - [ ] M1 backend: FastAPI app + settings, Postgres models + Alembic, PayPal client (from spike 1),
       MCP `request_payment`, audit table, CI, Render deploy
 
 ## Log (newest first)
+
+### 2026-11-02 01:55 IST — Anurag + Claude
+- Added 109 unit tests for `backend/policy.py`: every rule, boundaries (exactly at max/budget/count/velocity), malformed inputs, timezones, fail-closed on internal error, stable reason order, `PolicyDecision` invariants.
+- Fixed a fail-open bug in the budget check: `budget_used + amount` used the caller's Decimal context (28 digits by default), so huge values rounded and a fully spent mandate could ALLOW. Now added in an exact context that raises on rounding -> BLOCK. Two tests cover it (both fail on the old code).
+- Added `pytest.ini` (run `pytest` from repo root) and `backend/requirements-dev.txt` (pytest).
+- Files: `backend/policy.py`, `backend/tests/test_policy.py`, `pytest.ini`, `backend/requirements-dev.txt`, `CONTEXT.md`, `docs/LEARN.md`.
+- Branch `anurag`, not merged to `main` yet.
 
 ### 2026-11-02 01:35 IST — Anurag + Claude
 - Claimed: unit tests for `backend/policy.py`. Working on branch `anurag`; merged to `main` step by step.
