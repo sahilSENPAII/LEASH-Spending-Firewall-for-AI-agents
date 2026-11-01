@@ -54,7 +54,8 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 Coming in M1: `DATABASE_URL` (Neon). Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Sahil: working directly on `main`; task scope has not been recorded in this handoff yet.
+- Anurag + Claude (branch `anurag`): unit tests for `backend/policy.py`.
+- Track A/B split not decided yet.
 
 ## Next up
 - [ ] Sahil: install Python 3.12 (`brew install uv && uv python install 3.12`)
@@ -64,6 +65,10 @@ Coming in M1: `DATABASE_URL` (Neon). Ask Sahil for the shared sandbox values.
       MCP `request_payment`, audit table, CI, Render deploy
 
 ## Log (newest first)
+
+### 2026-11-02 01:35 IST — Anurag + Claude
+- Claimed: unit tests for `backend/policy.py`. Working on branch `anurag`; merged to `main` step by step.
+- Files: `CONTEXT.md`.
 
 ### 2026-10-30 IST — Anurag + Codex
 - Added `backend/policy.py`, a pure deterministic ALLOW/BLOCK evaluator with fail-closed input validation and reason codes.
