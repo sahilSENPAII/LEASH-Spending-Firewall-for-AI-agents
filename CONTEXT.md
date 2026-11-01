@@ -67,7 +67,9 @@ Ask Sahil for the shared sandbox values.
 
 ## In progress
 - Anurag + Claude: move `policy.py` into `backend/app/` (then mandates part 1) on `anurag`.
-- Sahil + Claude: add section 5 and `payment.blocked` to `docs/CONTRACTS.md`.
+- Sahil + Claude: add section 5 and `payment.blocked` to `docs/CONTRACTS.md`; then rename
+  `payment.error` to `payment.failed` in the orchestrator and fix the smoke script run note
+  (`uv run python -m scripts.smoke_paypal`).
 
 ## Next up
 - [x] Sahil: Python 3.12 via uv; Neon project `leash` (AWS us-east-1), `DATABASE_URL` in `.env`.
@@ -83,9 +85,18 @@ Ask Sahil for the shared sandbox values.
 - [x] M1 backend skeleton: FastAPI app + settings, Postgres models + Alembic, PayPal client, CI
       (merged into `main` from `sahil`).
 - [x] Sahil: MCP `request_payment` + orchestrator (merged into `main` from `sahil`).
+- [ ] Sahil: MCP `list_mandates` / `get_payment_status`.
 - [ ] Sahil: Render deploy.
 
 ## Log (newest first)
+
+### 2026-11-02 03:50 IST — Sahil + Claude
+- `sahil` was merged into `main` directly, without a PR.
+- Known gaps in the merged orchestrator until the trust-path functions land: usage is read without a lock
+  (two concurrent payments can both pass the budget check), and the mandate is the hardcoded `m_demo`.
+- Added Sahil's next tasks: `payment.error` -> `payment.failed`, smoke script run note, MCP
+  `list_mandates` / `get_payment_status`.
+- Files: `CONTEXT.md`.
 
 ### 2026-11-02 03:34 IST — Anurag + Claude
 - Updated the payment status to reflect it is on `main`, set Anurag's in-progress task to moving `policy.py` into `backend/app/`, and marked Sahil's merchant/category map complete.
