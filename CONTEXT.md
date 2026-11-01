@@ -51,37 +51,62 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 - PayPal sandbox works: Vault v3 saved wallet → AUTHORIZE (no buyer click) → capture / void,
   idempotent retries confirmed. All funds settle to the app's own merchant account (D10).
 - MCP stdio server works with Claude Desktop (spike). `mcp` pinned to `<2` (D11).
+- Backend skeleton is on branch `sahil` (not merged): `backend/app/` (config, async Neon DB, payments +
+  audit_events models, payment state machine, PayPal client), `/health`, Alembic `0001`, CI. Verified on
+  Sahil's laptop: `/health` returns db ok, tables migrated in Neon, real sandbox authorize -> capture,
+  idempotent retry and void all pass through `app/paypal.py`.
+- Run backend tests from `backend/`: `uv run pytest -q` (131 pass: money path + policy).
 - PayPal API is **not** reachable from Claude's cloud sandbox: anything calling PayPal must be run on a
   laptop.
 
 ## Env vars (names only — values live in each person's local `.env`)
 `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_BASE_URL`, `SANDBOX_BUYER_EMAIL`,
-`MERCHANT_SOUNDHUB_EMAIL`, `MERCHANT_MEGADEALS_EMAIL`, `PLATFORM_MERCHANT_EMAIL`, `GROQ_API_KEY`.
-Coming in M1: `DATABASE_URL` (Neon). Ask Sahil for the shared sandbox values.
+`MERCHANT_SOUNDHUB_EMAIL`, `MERCHANT_MEGADEALS_EMAIL`, `PLATFORM_MERCHANT_EMAIL`, `GROQ_API_KEY`,
+`PAYPAL_VAULT_ID` (saved demo-buyer wallet token), `DATABASE_URL`, `DATABASE_URL_POOLED` (Neon).
+Ask Sahil for the shared sandbox values.
 
 ## In progress
 - Anurag + Claude: write and agree `docs/CONTRACTS.md` (Anurag's half) with Sahil.
-- Sahil + Claude: (Sahil fills in)
+- Sahil + Claude: MCP `request_payment` + decision orchestrator calling `backend/policy.py`, PayPal and
+  the audit table (branch `sahil`). Then Render deploy.
 
 ## Next up
-- [ ] Sahil: install Python 3.12 (`brew install uv && uv python install 3.12`)
-- [ ] Sahil: create Neon project `leash`, add `DATABASE_URL` to `.env`
+- [x] Sahil: Python 3.12 via uv; Neon project `leash` (AWS us-east-1), `DATABASE_URL` in `.env`.
 - [x] Unit tests and budget fix for `backend/policy.py` (Anurag + Claude; merged into `main` from branch `anurag`, Nov 2).
 - [x] README test instructions and D12 exact-budget decision (merged from `anurag` into `main`, Nov 2).
 - [ ] Both: write and agree `docs/CONTRACTS.md` (Nov 2), including that usage/reservation code computes `recent_payment_count` from payments inside the velocity window.
 - [ ] Anurag: mandates — Ed25519 sign/verify, create/revoke, reserve/release budget (branch `anurag/mandates`).
 - [ ] Anurag: hash-chained audit log + `/audit/verify` (branch `anurag/audit`).
 - [ ] Integrate `policy.py` into `request_payment` with trusted signature/category/merchant inputs and atomic usage reservation.
-- [ ] M1 backend: FastAPI app + settings, Postgres models + Alembic, PayPal client (from spike 1),
-      MCP `request_payment`, audit table, CI, Render deploy
+- [x] M1 backend skeleton: FastAPI app + settings, Postgres models + Alembic, PayPal client, CI
+      (branch `sahil`, not merged).
+- [ ] Sahil: MCP `request_payment` + orchestrator, then Render deploy.
+- [ ] Both: agree how to run tests (Sahil: `uv run pytest` from `backend/`; root `pytest.ini` cannot
+      import the money-path tests without the backend dependencies).
 
 ## Log (newest first)
+
+### 2026-11-02 02:41 IST — Anurag + Claude
+- Integrated Sahil's backend handoff update from `origin/main` with the policy documentation merge; retained the backend status, environment variable names, and Claude Code instructions.
+- README test instructions and D12 exact-budget decision are now on `main`; the contracts task still needs the velocity-window definition for `recent_payment_count`.
+- Files: `CONTEXT.md`, `CLAUDE.md`.
+- No tests were run; this integration contains documentation changes only.
 
 ### 2026-11-02 02:40 IST — Anurag + Claude
 - Merged `origin/anurag` into `main`; README test instructions and D12 exact-budget decision are now on `main`.
 - Updated the `docs/CONTRACTS.md` next step to define `recent_payment_count` from payments inside the velocity window.
 - Files: `README.md`, `docs/DECISIONS.md`, `CONTEXT.md`.
 - No tests were run; the merge contains documentation changes only.
+
+### 2026-11-02 02:40 IST — Sahil + Claude
+- Branch `sahil` (pushed, not merged): backend skeleton in `backend/` (uv project, Python 3.12) with
+  `app/config.py`, `app/db.py`, `app/models.py`, `app/state.py`, `app/paypal.py`, `app/main.py`,
+  Alembic `0001` (`payments`, `audit_events` with `prev_hash`/`hash` columns for the audit chain),
+  `scripts/smoke_paypal.py`, GitHub Actions CI. Merged `origin/main` into `sahil`.
+- `backend/pyproject.toml` pytest `pythonpath = [".", ".."]` so `backend.policy` and `app` both import.
+- Verified on laptop: `/health` db ok, Neon migrated, sandbox authorize/capture/void + idempotent retry.
+- `CLAUDE.md` now imports `AGENTS.md` with `@AGENTS.md` so Claude Code loads it automatically.
+- New env var names: `PAYPAL_VAULT_ID`, `DATABASE_URL`, `DATABASE_URL_POOLED`.
 
 ### 2026-11-02 02:35 IST — Anurag + Claude
 - Added README test-run instructions and D12 documenting exact money sums and fail-closed rounding on branch `anurag`; pushed commit `4352e5f` to `origin/anurag`.
