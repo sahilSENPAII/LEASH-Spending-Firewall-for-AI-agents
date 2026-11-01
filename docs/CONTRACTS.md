@@ -17,14 +17,14 @@ a note in `CONTEXT.md` and a reply from the other person.
   on error.
 - **IDs:** `mandate_id` and `merchant_id` are our own strings (D10), at most 64 chars.
 
-## 1. Mandates — `backend/mandates.py` (Anurag)
+## 1. Mandates — `backend/app/mandates.py` (Anurag)
 
 ### What is signed
 A mandate's **terms** are signed with Ed25519 at creation; its **state** is not.
 
 | Signed terms (never change) | Unsigned state (changes) |
 |---|---|
-| `mandate_id`, `category`, `max_payment_amount`, `total_budget`, `max_payment_count`, `allowed_merchant_ids`, `expires_at`, `created_at` | `revoked_at`, `budget_used`, `payment_count` |
+| `mandate_id`, `intent`, `category`, `max_payment_amount`, `total_budget`, `max_payment_count`, `allowed_merchant_ids`, `expires_at`, `created_at` | `revoked_at`, `budget_used`, `payment_count` |
 
 Signed bytes = canonical JSON of the terms (see "Canonical JSON" below): amounts as strings
 (`"200.00"`), times as UTC ISO-8601 with `Z`, `allowed_merchant_ids` as a sorted list.
@@ -54,7 +54,7 @@ class MandateCheck:
 - `create_mandate` rejects bad terms (the same validation `policy.py` applies) with `ValueError`.
 - `revoke_mandate` is idempotent; revoking twice keeps the first `revoked_at`.
 
-## 2. Policy + budget hold — `backend/policy.py`, `backend/mandates.py` (Anurag)
+## 2. Policy + budget hold — `backend/app/policy.py`, `backend/app/mandates.py` (Anurag)
 
 `evaluate_payment` (exists) is pure and never called directly by the orchestrator. The orchestrator
 calls one function that checks **and** holds budget atomically, so two concurrent payments cannot
@@ -97,7 +97,7 @@ budget.
 Trusted inputs: `request.category` and `request.merchant_id` must come from Leash's own store
 records, not from the agent's text (see the `policy.py` docstring).
 
-## 3. Audit log — `backend/audit.py` (Anurag)
+## 3. Audit log — `backend/app/audit.py` (Anurag)
 
 Uses Sahil's `audit_events` table (migration 0001). Anurag's code fills `prev_hash` and `hash`.
 
@@ -311,9 +311,8 @@ Single demo user, no auth (hackathon scope; recorded as a limitation in the READ
 3. `/audit/verify` returns `ChainCheck`: **yes** (5.6).
 4. Migration `0002` on top of `0001`: **yes**. `sahil` is merged to `main`.
 
-## Open questions for Anurag
-A. Can mandates carry the user's own words as a signed `intent: str` term ("Sony or Bose
-   noise-cancelling headphones")? The judge needs it; `category` alone is too coarse to catch
-   "headphones mandate, gift-card cart" inside one category.
-B. `list_mandates` shows `remaining_budget` and `remaining_count`. Can `MandateRecord` expose them
-   (or `budget_used` / `payment_count`) so the orchestrator does not recompute them?
+## Open questions for Anurag (answered Nov 2)
+A. Signed `intent: str` term on mandates (the user's own words, used by the judge): **yes**. It is part
+   of `MandateTerms` and covered by the signature (section 1).
+B. `MandateRecord` exposes `budget_used`, `payment_count`, `total_budget` and `max_payment_count`:
+   **yes**, so `list_mandates` shows what is left without recomputing.

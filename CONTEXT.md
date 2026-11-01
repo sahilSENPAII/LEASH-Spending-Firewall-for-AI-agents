@@ -70,7 +70,8 @@ Ask Sahil for the shared sandbox values.
 
 ## In progress
 - Anurag + Claude: mandates part 2 on `anurag` — mandates + `budget_holds` models, migration `0002` (including the agreed one-off `audit_events` wipe), create/revoke/list, `check_and_reserve` / `release_budget`, and velocity settings.
-- Sahil + Claude: update `docs/CONTRACTS.md` paths after the policy move; rename `payment.error` to `payment.failed` in the orchestrator and fix the smoke script run note (`uv run python -m scripts.smoke_paypal`).
+- Sahil + Claude: paused (back later on Nov 2). Next: Groq intent judge (`app/judge.py`), HTTP MCP
+  transport + `list_mandates` / `get_payment_status`, Render deploy ($50 credits claimed, no card).
 
 ## Next up
 - [x] Sahil: Python 3.12 via uv; Neon project `leash` (AWS us-east-1), `DATABASE_URL` in `.env`.
@@ -93,6 +94,14 @@ Ask Sahil for the shared sandbox values.
 - [ ] Sahil: Render deploy.
 
 ## Log (newest first)
+
+### 2026-11-02 05:30 IST — Sahil + Claude
+- Merged `sahil` into `main` (`1ab1401`): smoke script run note fixed (`uv run python -m scripts.smoke_paypal`);
+  a failed void is now audited as `payment.failed` (was `payment.error`). 202 tests pass.
+- `docs/CONTRACTS.md`: sections 1-3 paths moved to `backend/app/`; `intent` added to the signed mandate
+  terms; Anurag's answers to questions A and B recorded.
+- Not done yet: the `{"void_failed": true}` payload from section 5.3 (comes with the `append_audit` switch).
+- Render: $50 hackathon credits applied to Sahil's account, no card on file.
 
 ### 2026-11-02 04:25 IST — Anurag + Claude
 - Added canonical JSON and Ed25519 signing/verification for mandate terms, including signed `intent`; `verify_mandate` fails closed. Revocation and usage state remain unsigned.
