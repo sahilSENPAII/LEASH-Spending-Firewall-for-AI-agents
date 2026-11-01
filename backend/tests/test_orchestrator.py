@@ -233,7 +233,7 @@ async def test_void_failure_leaves_hold_authorized_and_blocks(sessions):
     assert result["decision"] == "BLOCK" and result["status"] == S.AUTHORIZED
     (payment,), events = await _rows(sessions)
     assert payment.status == S.AUTHORIZED and payment.decision == "BLOCK"
-    assert events[-1].event_type == "payment.error"
+    assert events[-1].event_type == "payment.failed"
 
 
 async def test_database_error_blocks():

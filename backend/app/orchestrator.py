@@ -229,7 +229,7 @@ async def _fail(
     payment.decision = "BLOCK"
     payment.reasons = [reason]
     if target is None:
-        session.add(AuditEvent(event_type="payment.error", payment_id=payment.id, payload=reason))
+        session.add(AuditEvent(event_type="payment.failed", payment_id=payment.id, payload=reason))
     else:
         _move(session, payment, target, **reason)
     await session.commit()
