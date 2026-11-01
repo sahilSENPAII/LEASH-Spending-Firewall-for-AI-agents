@@ -42,20 +42,21 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 | M8 | Nov 12 | Devpost submission | — |
 
 ## Current state
-- M0 complete. Repo layout exists. `backend/policy.py` now contains a standalone deterministic evaluator; `agent/`, `stores/`, `frontend/`, and `ml/` remain placeholders.
+- M0 complete. Repo layout exists. `backend/app/policy.py` now contains a standalone deterministic evaluator; `agent/`, `stores/`, `frontend/`, and `ml/` remain placeholders.
 - The policy evaluator is integrated into `backend/app/orchestrator.py`, which persists payment and audit state in Postgres. The current flow uses a server-side demo mandate; Ed25519 verification and atomic budget holds remain pending.
 - Task split agreed (`task-split.md`): Sahil = money path + Groq judge; Anurag = trust path + XGBoost/SHAP + LangGraph agent.
 - Workflow docs are split: human handoff rules live in `CONTEXT.md`; agent-specific rules live in `AGENTS.md`. Both are maintained directly on `main`; code goes on task branches and through PRs.
 - The policy evaluator's 109 unit tests and exact Decimal budget check are now merged to `main`.
 - `backend/tests/test_policy.py` passes Sahil's Ruff 0.17.3 CI rules; the lint fix is merged to `main`.
 - README test instructions and D12's exact-budget decision are now merged into `main` from `anurag`.
-- Contracts agreed (Nov 2): Sahil said yes to all 4 open questions and the `check_and_reserve` design. Sahil adds section 5 and `payment.blocked` to `docs/CONTRACTS.md`.
+- Contracts agreed (Nov 2): Sahil said yes to all 4 open questions and the `check_and_reserve` design. Section 5 and `payment.blocked` are in `docs/CONTRACTS.md`; path updates are pending.
 - Sahil: real Claude Desktop -> orchestrator -> PayPal sandbox $1 payment to SoundHub captured; MegaDeals and $250 blocked by `policy.py` (149 tests pass).
+- Policy engine moved to `backend/app/policy.py` (import `app.policy`). Root `pytest.ini` and `backend/requirements-dev.txt` removed. Tests and lint only via `uv run pytest` / `uv run ruff check app tests scripts` from `backend/` (149 pass).
+- Sahil agreed: migration `0002` includes a clearly named one-off step that deletes all `audit_events` rows (test data only); `payments` is untouched.
 - PayPal sandbox works: Vault v3 saved wallet → AUTHORIZE (no buyer click) → capture / void,
   idempotent retries confirmed. All funds settle to the app's own merchant account (D10).
 - MCP stdio server works with Claude Desktop (spike). `mcp` pinned to `<2` (D11).
 - Sahil's backend app, orchestrator, MCP tool, database models, Alembic `0001`, and CI are merged into `main` from `sahil`.
-- Run backend tests from `backend/`: `uv run pytest` (149 pass: money path, policy, and orchestrator).
 - PayPal API is **not** reachable from Claude's cloud sandbox: anything calling PayPal must be run on a
   laptop.
 
@@ -66,10 +67,8 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Claude: move `policy.py` into `backend/app/` (then mandates part 1) on `anurag`.
-- Sahil + Claude: add section 5 and `payment.blocked` to `docs/CONTRACTS.md`; then rename
-  `payment.error` to `payment.failed` in the orchestrator and fix the smoke script run note
-  (`uv run python -m scripts.smoke_paypal`).
+- Anurag + Claude: mandates part 1 on `anurag` — `app/canonical.py`, Ed25519 sign/verify, `verify_mandate` (no DB).
+- Sahil + Claude: update `docs/CONTRACTS.md` paths after the policy move; rename `payment.error` to `payment.failed` in the orchestrator and fix the smoke script run note (`uv run python -m scripts.smoke_paypal`).
 
 ## Next up
 - [x] Sahil: Python 3.12 via uv; Neon project `leash` (AWS us-east-1), `DATABASE_URL` in `.env`.
@@ -77,11 +76,14 @@ Ask Sahil for the shared sandbox values.
 - [x] README test instructions and D12 exact-budget decision (merged from `anurag` into `main`, Nov 2).
 - [x] Both: agree `docs/CONTRACTS.md` (Nov 2). Sahil: section 5 + `payment.blocked`.
 - [x] Sahil: `sahil` branch merged into `main` (Nov 2).
-- [ ] Anurag: move `policy.py` (+ mandates, canonical) into `backend/app/`, drop root `pytest.ini`, add `cryptography` to `pyproject.toml`/`uv.lock`. Tests: `uv run pytest` from `backend/`.
+- [x] Anurag: move the policy engine to `backend/app/policy.py`; remove root `pytest.ini` and `backend/requirements-dev.txt`; tests and Ruff pass from `backend/`.
+- [ ] Anurag: add `cryptography` to `backend/pyproject.toml` and `uv.lock` for mandate signing.
 - [x] Sahil: merchant/category config (server-side, never from the agent; `MERCHANT_CATEGORIES` in `backend/app/orchestrator.py`).
 - [ ] Anurag: mandates — Ed25519 sign/verify, create/revoke, reserve/release budget (branch `anurag`).
 - [ ] Anurag: hash-chained audit log + `/audit/verify` (branch `anurag`).
 - [ ] Sahil: orchestrator calls `check_and_reserve` / `release_budget` / `append_audit` per `docs/CONTRACTS.md`.
+- [ ] Sahil: update section 5 paths in `docs/CONTRACTS.md` to `backend/app/policy.py`, `app/mandates.py`, `app/audit.py`.
+- [ ] Sahil: rename `payment.error` to `payment.failed` after the policy move is on `main`.
 - [x] M1 backend skeleton: FastAPI app + settings, Postgres models + Alembic, PayPal client, CI
       (merged into `main` from `sahil`).
 - [x] Sahil: MCP `request_payment` + orchestrator (merged into `main` from `sahil`).
@@ -89,6 +91,12 @@ Ask Sahil for the shared sandbox values.
 - [ ] Sahil: Render deploy.
 
 ## Log (newest first)
+
+### 2026-11-02 04:04 IST — Anurag + Claude
+- Moved `backend/policy.py` to `backend/app/policy.py`; updated imports in `orchestrator.py` and `test_policy.py`; removed `PYTHONPATH=..` from `mcp_server.py` and `..` from pytest `pythonpath`.
+- Removed root `pytest.ini` and `backend/requirements-dev.txt`; README test steps now use uv. Fixed policy lint so CI covers it.
+- 149 tests pass, Ruff clean, and `import app.mcp_server, app.policy` works from `backend/`.
+- Files: `README.md`, `backend/app/{policy,orchestrator,mcp_server}.py`, `backend/pyproject.toml`, `backend/tests/test_policy.py`, `docs/DECISIONS.md`, `pytest.ini`, `backend/requirements-dev.txt`.
 
 ### 2026-11-02 03:50 IST — Sahil + Claude
 - `sahil` was merged into `main` directly, without a PR.
