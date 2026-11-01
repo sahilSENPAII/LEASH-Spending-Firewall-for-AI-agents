@@ -76,8 +76,8 @@ Ask Sahil for the shared sandbox values.
 - [x] Unit tests and budget fix for `backend/policy.py` (Anurag + Claude; merged into `main` from branch `anurag`, Nov 2).
 - [x] README test instructions and D12 exact-budget decision (merged from `anurag` into `main`, Nov 2).
 - [ ] Both: write and agree `docs/CONTRACTS.md` (Nov 2), including that usage/reservation code computes `recent_payment_count` from payments inside the velocity window.
-- [ ] Anurag: mandates — Ed25519 sign/verify, create/revoke, reserve/release budget (branch `anurag/mandates`).
-- [ ] Anurag: hash-chained audit log + `/audit/verify` (branch `anurag/audit`).
+- [ ] Anurag: mandates — Ed25519 sign/verify, create/revoke, reserve/release budget (branch `anurag`).
+- [ ] Anurag: hash-chained audit log + `/audit/verify` (branch `anurag`).
 - [ ] Integrate `policy.py` into `request_payment` with trusted signature/category/merchant inputs and atomic usage reservation.
 - [x] M1 backend skeleton: FastAPI app + settings, Postgres models + Alembic, PayPal client, CI
       (branch `sahil`, not merged).
@@ -86,6 +86,10 @@ Ask Sahil for the shared sandbox values.
       import the money-path tests without the backend dependencies).
 
 ## Log (newest first)
+
+### 2026-11-02 02:51 IST — Anurag + Claude
+- Changed the mandates and audit Next up branch labels to the existing `anurag` branch.
+- Files: `CONTEXT.md`.
 
 ### 2026-11-02 02:49 IST — Anurag + Claude
 - Fixed Ruff CI errors in `backend/tests/test_policy.py`: sorted imports, used `datetime.UTC`, and wrapped the long parametrization line.
