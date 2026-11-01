@@ -47,3 +47,12 @@ One entry per decision: what we chose, what we rejected, why. Newest at the bott
 ## D11. Pin the MCP Python SDK to 1.x (`mcp<2`)
 - Spike 2 (Oct 30): pip pulled mcp 2.x, which renamed FastMCP to MCPServer and changed other APIs.
 - 1.x FastMCP is stable, widely documented and what most examples use. Revisit 2.x after submission.
+
+## D12. Money sums are exact; any rounding means BLOCK
+- Amounts are `Decimal`, never float. But Decimal arithmetic still rounds to the active context
+  (28 digits by default, and a caller can lower it). Nov 2: `1E+30 + 0.01` rounded back to `1E+30`,
+  so a fully spent mandate passed the budget check.
+- `backend/policy.py` adds `budget_used + amount` in a private exact context that raises `Inexact`
+  instead of rounding; the evaluator turns that into BLOCK (D3). Comparisons need no context, they are exact.
+- Rejected: an upper bound on amounts alone (still depends on the caller's context), floats or integer
+  cents (cents would work but every module would have to convert; Decimal is what PayPal's API strings map to).

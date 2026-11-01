@@ -25,7 +25,7 @@ checked against a user-signed mandate → ALLOW / STEP-UP / BLOCK, and logged in
 Stack: Python 3.12, FastAPI, Postgres (Neon), MCP Python SDK 1.x, PayPal REST v2 sandbox, Groq via
 LiteLLM, XGBoost + SHAP, LangGraph + Playwright demo agent, React + AG Grid. Zero spend (see D6).
 
-Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1–D11),
+Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1–D12),
 `docs/LEARN.md` (concepts), `spikes/README.md` (how to run the M0 tests).
 
 ## Milestones
@@ -47,7 +47,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 - Task split agreed (`task-split.md`): Sahil = money path + Groq judge; Anurag = trust path + XGBoost/SHAP + LangGraph agent.
 - Workflow docs are split: human handoff rules live in `CONTEXT.md`; agent-specific rules live in `AGENTS.md`. Both are maintained directly on `main`; code goes on task branches and through PRs.
 - The policy evaluator's 109 unit tests and exact Decimal budget check are now merged to `main`.
-- README test instructions and D12 are committed on branch `anurag` (`4352e5f`); they are pending main integration.
+- README test instructions and D12's exact-budget decision are now merged into `main` from `anurag`.
 - PayPal sandbox works: Vault v3 saved wallet → AUTHORIZE (no buyer click) → capture / void,
   idempotent retries confirmed. All funds settle to the app's own merchant account (D10).
 - MCP stdio server works with Claude Desktop (spike). `mcp` pinned to `<2` (D11).
@@ -67,8 +67,8 @@ Coming in M1: `DATABASE_URL` (Neon). Ask Sahil for the shared sandbox values.
 - [ ] Sahil: install Python 3.12 (`brew install uv && uv python install 3.12`)
 - [ ] Sahil: create Neon project `leash`, add `DATABASE_URL` to `.env`
 - [x] Unit tests and budget fix for `backend/policy.py` (Anurag + Claude; merged into `main` from branch `anurag`, Nov 2).
-- [ ] README test instructions and D12 exact-budget decision (commit `4352e5f` on branch `anurag`; main integration pending).
-- [ ] Both: write and agree `docs/CONTRACTS.md` (Nov 2).
+- [x] README test instructions and D12 exact-budget decision (merged from `anurag` into `main`, Nov 2).
+- [ ] Both: write and agree `docs/CONTRACTS.md` (Nov 2), including that usage/reservation code computes `recent_payment_count` from payments inside the velocity window.
 - [ ] Anurag: mandates — Ed25519 sign/verify, create/revoke, reserve/release budget (branch `anurag/mandates`).
 - [ ] Anurag: hash-chained audit log + `/audit/verify` (branch `anurag/audit`).
 - [ ] Integrate `policy.py` into `request_payment` with trusted signature/category/merchant inputs and atomic usage reservation.
@@ -76,6 +76,12 @@ Coming in M1: `DATABASE_URL` (Neon). Ask Sahil for the shared sandbox values.
       MCP `request_payment`, audit table, CI, Render deploy
 
 ## Log (newest first)
+
+### 2026-11-02 02:40 IST — Anurag + Claude
+- Merged `origin/anurag` into `main`; README test instructions and D12 exact-budget decision are now on `main`.
+- Updated the `docs/CONTRACTS.md` next step to define `recent_payment_count` from payments inside the velocity window.
+- Files: `README.md`, `docs/DECISIONS.md`, `CONTEXT.md`.
+- No tests were run; the merge contains documentation changes only.
 
 ### 2026-11-02 02:35 IST — Anurag + Claude
 - Added README test-run instructions and D12 documenting exact money sums and fail-closed rounding on branch `anurag`; pushed commit `4352e5f` to `origin/anurag`.
