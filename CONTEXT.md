@@ -87,6 +87,11 @@ Ask Sahil for the shared sandbox values.
 
 ## Log (newest first)
 
+### 2026-11-02 02:55 IST — Anurag + Claude
+- Removed the `<name>/<task>` branch option from `AGENTS.md` to match the fixed `sahil` and `anurag` branch names and avoid the name clash.
+- Files: `AGENTS.md`, `CONTEXT.md`.
+- No tests were run; this was a documentation-only update.
+
 ### 2026-11-02 02:54 IST — Anurag + Claude
 - Updated Rule 8 and `AGENTS.md` to name the existing `sahil` and `anurag` branches; left historical log wording unchanged.
 - Files: `CONTEXT.md`, `AGENTS.md`.

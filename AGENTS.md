@@ -84,7 +84,7 @@ House rules:
 ## Leash adaptations (these override the protocol above where they conflict)
 The protocol was written for bug fixes in upstream open-source repos. In this repo:
 - "Existing issues and PRs" means `CONTEXT.md` claims and the other person's branch. Stop if the task is already claimed.
-- Work on your own branch (`sahil` or `anurag`, or `<name>/<task>`). Merge `origin/main` into it before starting a task. "Upstream default branch" means `origin/main`.
+- Work on your own branch (`sahil` or `anurag`). Merge `origin/main` into it before starting a task. "Upstream default branch" means `origin/main`.
 - Bug fixes: the protocol applies as written (confirm the bug, smallest diff, tests fail without the fix and pass with it).
 - New features: the smallest design that meets the task. New modules, helpers and test files are allowed. Tests cover the new behaviour and its edge cases; the fail-without-fix proof does not apply.
 - One commit per `CONTEXT.md` task, then stop and report.
