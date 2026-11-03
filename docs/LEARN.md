@@ -177,3 +177,53 @@ those lines.
 5. **Why does SQLite need special handling?** It has no row locks (it ignores FOR UPDATE) and drops
    timezone info on read. Tests run on SQLite, so datetimes are converted back to UTC on load;
    production runs on Postgres, where the lock is real.
+
+---
+
+## Audit chain (Nov 3) — Anurag
+
+### What was built
+`app/audit.py`: `append_audit` writes each audit event with the hash of the event before it;
+`verify_chain` (and `GET /audit/verify`) recomputes every hash and reports the first bad entry.
+`create_mandate` / `revoke_mandate` write `mandate.created` / `mandate.revoked` through it.
+
+### Concepts, in plain words
+**Hash function (SHA-256).** Turns any bytes into a 64-character fingerprint. Change one byte of the
+input and the fingerprint changes completely, and nobody can work backwards from fingerprint to input.
+
+**Hash chain.** Each entry's hash covers its own content *and* the previous entry's hash. So entry 5's
+hash depends on entries 1 to 4. Edit entry 2 and its hash no longer matches; rewrite entry 2's hash too
+and entry 3's link (`prev_hash`) no longer matches. To hide one change you would have to rewrite every
+entry after it. This is the same idea as Git commits and blockchains, without the network.
+
+**Tamper-evident vs tamper-proof.** The chain does not stop anyone with database access from
+changing rows; it makes the change visible. The check is cheap and anyone can run it.
+
+**Genesis.** The first entry links to `"0" * 64`, a fixed starting value, so it is checked like the rest.
+
+**Why canonical JSON again.** The hash is over bytes. The payload is stored exactly as it was hashed
+(Decimal and dates already turned into strings), so re-reading and re-hashing gives the same bytes.
+
+**Advisory lock.** Two requests appending at the same moment would both read "last hash = X" and both
+link to X, forking the chain. `pg_advisory_xact_lock` makes appends wait for each other until the
+transaction ends. It locks a number we choose, not a row, so it costs nothing elsewhere.
+
+**Truncation.** Deleting the *newest* entries leaves a shorter chain that still verifies. Fixes:
+publish the latest hash somewhere outside the database (a signed receipt, a public log) and compare.
+
+**UTC before storing (a bug the tests found).** SQLite stores a time like 17:30+05:30 as plain 17:30
+and drops the offset, so on read it looked like 17:30 UTC and the hash no longer matched. Every time is
+now converted to UTC before it is stored, in both the audit log and mandates.
+
+### Likely interview questions
+1. **How do you make a log tamper-evident?** Hash chain: each entry hashes the previous hash plus its
+   own content; a verifier recomputes it. *Follow-up: what can it not detect?* Tail truncation, unless
+   the head hash is anchored outside.
+2. **Why not just sign each row?** A per-row signature proves a row is genuine but not that none were
+   deleted or reordered; the chain links them. (They combine well: sign the head hash.)
+3. **How do you stop concurrent writers forking the chain?** Serialize appends: an advisory lock held
+   until commit, taken before reading the last hash.
+4. **Why write the audit entry in the same transaction as the change?** So there is never a decision
+   without its audit entry, or an audit entry for a change that rolled back.
+5. **How did you check the tests are good?** Broke the code on purpose (hash without `prev_hash`,
+   verify skipping the link check, no UTC conversion, no lock) and confirmed a test failed each time.

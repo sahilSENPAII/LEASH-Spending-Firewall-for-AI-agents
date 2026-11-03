@@ -271,6 +271,26 @@ async def test_created_mandate_round_trips_and_verifies(sessions):
     assert check.signature_valid and check.reasons == ()
 
 
+async def test_mandate_created_in_another_timezone_still_verifies(sessions):
+    ist = timezone(timedelta(hours=5, minutes=30))
+    await _create(
+        sessions,
+        created_at=NOW.astimezone(ist),
+        expires_at=(NOW + timedelta(days=7)).astimezone(ist),
+    )
+    async with sessions() as s:
+        loaded = await get_mandate(s, "m_demo")
+    assert loaded.terms.created_at == NOW
+    assert verify_mandate(loaded).signature_valid
+
+
+async def test_revoke_with_naive_time_is_refused(sessions):
+    await _create(sessions)
+    async with sessions() as s:
+        with pytest.raises(ValueError, match="timezone-aware"):
+            await revoke_mandate(s, "m_demo", datetime(2026, 11, 3))
+
+
 async def test_duplicate_mandate_id_is_rejected(sessions):
     await _create(sessions)
     with pytest.raises(ValueError, match="already exists"):
@@ -507,6 +527,15 @@ async def test_release_gives_budget_back_once(sessions):
     record, (hold,) = await _state(sessions)
     assert record.budget_used == Decimal("0") and record.payment_count == 0
     assert hold.released_at is not None
+
+
+async def test_release_with_naive_time_is_refused(sessions):
+    await _create(sessions)
+    pid = await _payment(sessions)
+    await _reserve(sessions, pid)
+    async with sessions() as s:
+        with pytest.raises(ValueError, match="timezone-aware"):
+            await release_budget(s, payment_id=pid, now=datetime(2026, 11, 3))
 
 
 async def test_release_without_hold_is_false(sessions):

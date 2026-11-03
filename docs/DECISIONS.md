@@ -56,3 +56,14 @@ One entry per decision: what we chose, what we rejected, why. Newest at the bott
   instead of rounding; the evaluator turns that into BLOCK (D3). Comparisons need no context, they are exact.
 - Rejected: an upper bound on amounts alone (still depends on the caller's context), floats or integer
   cents (cents would work but every module would have to convert; Decimal is what PayPal's API strings map to).
+
+## D13. One hash chain over all audit events; any unhashed row breaks it
+- `app/audit.py` links every `audit_events` row to the one before it (SHA-256 over the previous hash
+  plus canonical JSON of the entry). Editing, deleting or reordering a row is reported by
+  `verify_chain` / `GET /audit/verify` with the first bad id.
+- Every audit write must go through `append_audit`. A row written directly has no hash: verification
+  fails at it and `append_audit` refuses to extend it (fail closed, D3), instead of skipping it.
+  Rejected: skipping unhashed rows, because then nulling a row's hash would hide it from the check.
+- A Postgres advisory lock serializes appends so two requests cannot link to the same previous entry.
+- Known limit: deleting the newest entries (truncating the tail) leaves a valid shorter chain. For the
+  demo the console shows the entry count; production would publish the head hash somewhere external.

@@ -28,6 +28,7 @@ from cryptography.hazmat.primitives.serialization import (
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.audit import append_audit
 from app.canonical import canonical_json
 from app.config import get_settings
 from app.models import BudgetHold, MandateRow, Payment
@@ -212,7 +213,7 @@ def _to_policy_mandate(record: MandateRecord) -> Mandate:
 
 
 async def create_mandate(session: AsyncSession, terms: MandateTerms) -> MandateRecord:
-    """Validate, sign with MANDATE_SIGNING_KEY and store a new mandate.
+    """Validate, sign with MANDATE_SIGNING_KEY, store a new mandate and audit `mandate.created`.
 
     Raises ValueError on bad terms, an existing mandate_id or a missing signing key.
     """
@@ -230,8 +231,9 @@ async def create_mandate(session: AsyncSession, terms: MandateTerms) -> MandateR
         total_budget=terms.total_budget,
         max_payment_count=terms.max_payment_count,
         allowed_merchant_ids=sorted(terms.allowed_merchant_ids),
-        expires_at=terms.expires_at,
-        created_at=terms.created_at,
+        # Stored in UTC: SQLite would otherwise keep the local wall time and drop the offset.
+        expires_at=terms.expires_at.astimezone(UTC),
+        created_at=terms.created_at.astimezone(UTC),
         signature=sign_terms(terms, key),
         revoked_at=None,
         budget_used=Decimal("0"),
@@ -239,17 +241,42 @@ async def create_mandate(session: AsyncSession, terms: MandateTerms) -> MandateR
     )
     session.add(row)
     await session.flush()
+    await append_audit(
+        session,
+        event_type="mandate.created",
+        payment_id=None,
+        payload={
+            "mandate_id": terms.mandate_id,
+            "intent": terms.intent,
+            "category": terms.category,
+            "max_payment_amount": terms.max_payment_amount,
+            "total_budget": terms.total_budget,
+            "max_payment_count": terms.max_payment_count,
+            "allowed_merchant_ids": sorted(terms.allowed_merchant_ids),
+            "expires_at": terms.expires_at,
+            "signature": row.signature,
+        },
+        now=terms.created_at,
+    )
     return _to_record(row)
 
 
 async def revoke_mandate(session: AsyncSession, mandate_id: str, now: datetime) -> MandateRecord:
-    """Mark a mandate revoked. Revoking twice keeps the first time. Raises MandateNotFound."""
+    """Mark a mandate revoked and audit `mandate.revoked`. Revoking twice keeps the first time
+    and writes no second entry. Raises MandateNotFound."""
     row = await _locked(session, mandate_id)
     if row is None:
         raise MandateNotFound(mandate_id)
     if row.revoked_at is None:
-        row.revoked_at = now
+        row.revoked_at = _to_utc(now)
         await session.flush()
+        await append_audit(
+            session,
+            event_type="mandate.revoked",
+            payment_id=None,
+            payload={"mandate_id": mandate_id},
+            now=now,
+        )
     return _to_record(row)
 
 
@@ -317,7 +344,7 @@ async def check_and_reserve(
             payment_id=payment_id,
             mandate_id=mandate_id,
             amount=request.amount,
-            created_at=now,
+            created_at=now.astimezone(UTC),
             released_at=None,
         )
     )
@@ -339,7 +366,7 @@ async def release_budget(session: AsyncSession, *, payment_id: str, now: datetim
         raise ValueError(f"mandate {row.id!r} usage is lower than the hold being released")
     row.budget_used = row.budget_used - hold.amount
     row.payment_count = row.payment_count - 1
-    hold.released_at = now
+    hold.released_at = _to_utc(now)
     await session.flush()
     return True
 
@@ -391,6 +418,12 @@ def validate_terms(terms: MandateTerms) -> list[str]:
 async def _locked(session: AsyncSession, mandate_id: str) -> MandateRow | None:
     # SELECT ... FOR UPDATE on Postgres; SQLite (tests) has no row locks and ignores it.
     return await session.get(MandateRow, mandate_id, with_for_update=True, populate_existing=True)
+
+
+def _to_utc(value: datetime) -> datetime:
+    if not isinstance(value, datetime) or value.utcoffset() is None:
+        raise ValueError("now must be a timezone-aware datetime")
+    return value.astimezone(UTC)
 
 
 def _utc(value: datetime | None) -> datetime | None:
