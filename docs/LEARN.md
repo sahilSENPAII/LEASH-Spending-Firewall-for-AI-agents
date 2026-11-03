@@ -118,3 +118,62 @@ rounding; the evaluator turns that into BLOCK. Comparisons (`>`) are always exac
    evaluator (a Decimal subclass whose comparison raises) and assert BLOCK with `internal_evaluation_error`.
 3. **How do you know a test actually tests the fix?** Ran the new tests against the old code: they fail
    there and pass after the fix.
+
+---
+
+## Mandates (Nov 2–3) — Anurag
+
+### What was built
+- `app/canonical.py`: one exact byte string per value (sorted keys, no floats), used for signing
+  and, next, for audit hashes.
+- `app/mandates.py` part 1: the user's terms (`MandateTerms`, including their own words as `intent`)
+  are signed with Ed25519; `verify_mandate` checks the signature and never raises.
+- Part 2: `mandates` and `budget_holds` tables (migration `0002`), `create_mandate`,
+  `revoke_mandate`, `list_mandates`, and `check_and_reserve` / `release_budget`.
+
+### Concepts, in plain words
+**Digital signature (Ed25519).** A private key makes a short signature over some bytes; anyone with
+the public key can check that those exact bytes were signed. Change one character of the terms and
+the check fails. So editing a mandate's budget in the database makes every payment under it BLOCK.
+
+**Canonical form.** A signature is over bytes, not over meaning. `{"a":1,"b":2}` and `{"b":2,"a":1}`
+mean the same but are different bytes. Canonical JSON (sorted keys, fixed number and date format)
+gives one encoding per value, so the same terms always produce the same signature. Floats are refused
+because `0.1` has no exact binary form.
+
+**Signed terms vs. unsigned state.** What the user approved (max amount, merchants, expiry) never
+changes, so it is signed. Usage (`budget_used`, `payment_count`) and `revoked_at` change all the
+time, so they are plain columns. Signing them would mean re-signing after every payment.
+
+**Row lock (`SELECT ... FOR UPDATE`).** Two payments on the same mandate arrive at once. Without a
+lock, both read "$321 left", both pass, and $500 is spent from a $321 budget. `check_and_reserve`
+locks the mandate row first, so the second request waits until the first has checked and held its
+budget. This is the "check-then-act" race, fixed by making check and hold one atomic step.
+
+**Budget hold (reservation).** On ALLOW the amount is held at once, before PayPal is called. If
+PayPal or a later check fails, `release_budget` gives it back. Like a hotel holding money on a card:
+counted as spent until confirmed or released. Releasing twice is a no-op (idempotent), so a retry
+cannot give the budget back twice.
+
+**Lock ordering.** Both functions lock the mandate row before the hold row. If one locked A then B
+and the other B then A, two requests could wait on each other forever (deadlock).
+
+**Mutation testing (done by hand).** To check the tests themselves, the code was broken on purpose
+(the window edge `>=` changed to `>`, the "skip this payment" filter removed, the UTC fix removed,
+BLOCK still holding budget). Each change made at least one test fail, so the tests really guard
+those lines.
+
+### Likely interview questions
+1. **Why sign the mandate if the server holds the key?** It proves the terms were not edited after
+   creation (DB tampering, a bug, a bad migration). *Follow-up: production?* Sign on the user's
+   device (passkey / WebCrypto) so the server cannot forge consent; the server keeps only public keys.
+2. **How do you stop two concurrent payments overspending?** Lock the mandate row, check, hold the
+   budget, commit, all in one transaction. *Follow-up: why not just a CHECK constraint?* The policy
+   has more rules (count, velocity) than one column constraint can express.
+3. **Why hold budget before calling PayPal instead of after capture?** Otherwise two payments could
+   both be authorized against the same remaining budget while PayPal is slow.
+4. **What happens if release runs twice, or for a payment that never had a hold?** It returns
+   `False` and changes nothing; `released_at` marks the hold as done.
+5. **Why does SQLite need special handling?** It has no row locks (it ignores FOR UPDATE) and drops
+   timezone info on read. Tests run on SQLite, so datetimes are converted back to UTC on load;
+   production runs on Postgres, where the lock is real.

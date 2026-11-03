@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     groq_api_key: str = ""
     # Base64 Ed25519 private key; the server signs mandates for the demo user. See app/mandates.py.
     mandate_signing_key: str = ""
+    velocity_max_payments: int = 3
+    velocity_window_seconds: int = 600
 
 
 @lru_cache

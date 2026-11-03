@@ -1,14 +1,14 @@
-"""Database tables owned by the money path (payments) plus the shared audit table.
+"""Database tables: payments (money path), mandates and budget holds (trust path), audit events.
 
-Mandates and the hash-chain logic for audit_events are owned by Anurag (see task-split.md);
-the audit columns for the chain exist here so the schema is ready.
+Mandates, budget holds and the hash-chain logic for audit_events are owned by Anurag
+(see task-split.md); their logic lives in app/mandates.py and app/audit.py.
 """
 
 import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import JSON, BigInteger, DateTime, Numeric, String, func
+from sqlalchemy import JSON, BigInteger, DateTime, ForeignKey, Integer, Numeric, String, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.state import PaymentStatus
@@ -54,3 +54,35 @@ class AuditEvent(Base):
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
     prev_hash: Mapped[str | None] = mapped_column(String(64))  # filled by the hash-chain module
     hash: Mapped[str | None] = mapped_column(String(64))
+
+
+class MandateRow(Base):
+    """A signed mandate. Terms columns are covered by `signature`; the last three are state."""
+
+    __tablename__ = "mandates"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    intent: Mapped[str] = mapped_column(String(500))
+    category: Mapped[str] = mapped_column(String(64))
+    max_payment_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    total_budget: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    max_payment_count: Mapped[int] = mapped_column(Integer)
+    allowed_merchant_ids: Mapped[list] = mapped_column(JSON)  # sorted list of merchant ids
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    signature: Mapped[str] = mapped_column(String(128))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    budget_used: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0"))
+    payment_count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class BudgetHold(Base):
+    """Budget held for one payment between ALLOW and capture; released on any other end."""
+
+    __tablename__ = "budget_holds"
+
+    payment_id: Mapped[str] = mapped_column(ForeignKey("payments.id"), primary_key=True)
+    mandate_id: Mapped[str] = mapped_column(ForeignKey("mandates.id"), index=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
