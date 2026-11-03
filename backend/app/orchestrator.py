@@ -1,46 +1,27 @@
 """Decision orchestrator: policy check, then PayPal authorize + capture, all recorded in Postgres.
 
 Every request ends in ALLOW or BLOCK. Any error, in a check or in PayPal, is a BLOCK (D3).
-Status changes go through `app.state.transition`, and each one writes an audit event.
+Call order and release points follow docs/CONTRACTS.md section 5.3. Status changes go through
+`app.state.transition`, and each one writes an audit event through `append_audit`.
 """
 
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.models import AuditEvent, Payment
+from app.audit import append_audit
+from app.mandates import check_and_reserve, release_budget
+from app.models import Payment
 from app.paypal import PayPalClient
-from app.policy import (
-    Mandate,
-    PaymentRequest,
-    UsageSnapshot,
-    VelocityPolicy,
-    evaluate_payment,
-)
+from app.policy import PaymentRequest
 from app.state import PaymentStatus, transition
 
 log = logging.getLogger(__name__)
 
-# Stand-in until the mandates module (verify_mandate) exists. It is a server-side constant,
-# so there is no signature to check yet.
-DEMO_MANDATE = Mandate(
-    mandate_id="m_demo",
-    category="electronics",
-    max_payment_amount=Decimal("200.00"),
-    total_budget=Decimal("500.00"),
-    max_payment_count=5,
-    allowed_merchant_ids=frozenset({"soundhub"}),
-    expires_at=datetime(2026, 12, 31, tzinfo=UTC),
-    revoked=False,
-)
-VELOCITY = VelocityPolicy(max_payments=3, window=timedelta(minutes=10))
 # Category comes from our own store list, never from the agent.
 MERCHANT_CATEGORIES = {"soundhub": "electronics", "megadeals": "electronics"}
-# Statuses where money is held or taken, so they count against the mandate.
-SPENT = (PaymentStatus.AUTHORIZED, PaymentStatus.CAPTURED)
 
 INVALID_AMOUNT = {
     "code": "invalid_request_amount",
@@ -108,22 +89,6 @@ async def _decide_and_pay(
     except (InvalidOperation, TypeError, ValueError):
         return _response(None, "BLOCK", [INVALID_AMOUNT])
 
-    mandate = DEMO_MANDATE if mandate_id == DEMO_MANDATE.mandate_id else None
-    decision = evaluate_payment(
-        request=PaymentRequest(
-            amount=value,
-            currency="USD",
-            category=MERCHANT_CATEGORIES.get(merchant_id, ""),
-            merchant_id=merchant_id,
-        ),
-        mandate=mandate,
-        usage=await _usage(session, mandate_id, now),
-        velocity_policy=VELOCITY,
-        mandate_signature_valid=mandate is not None,
-        now=now,
-    )
-    reasons = [{"code": r.code, "message": r.message} for r in decision.reasons]
-
     payment = Payment(
         mandate_id=mandate_id,
         merchant_id=merchant_id,
@@ -131,32 +96,46 @@ async def _decide_and_pay(
         currency="USD",
         items=items,
         status=PaymentStatus.REQUESTED,
-        decision=decision.outcome.value,
-        reasons=reasons,
         created_at=now,
     )
     session.add(payment)
+    # The budget hold references payments.id, so the row must exist first.
     await session.flush()
-    session.add(
-        AuditEvent(
-            event_type="payment.decided",
-            payment_id=payment.id,
-            payload={
-                "decision": decision.outcome.value,
-                "reasons": reasons,
-                "mandate_id": mandate_id,
-                "merchant_id": merchant_id,
-                "amount": str(value),
-            },
-        )
+    decision = await check_and_reserve(
+        session,
+        payment_id=payment.id,
+        request=PaymentRequest(
+            amount=value,
+            currency="USD",
+            category=MERCHANT_CATEGORIES.get(merchant_id, ""),
+            merchant_id=merchant_id,
+        ),
+        mandate_id=mandate_id,
+        now=now,
+    )
+    reasons = [{"code": r.code, "message": r.message} for r in decision.reasons]
+    payment.decision = decision.outcome.value
+    payment.reasons = reasons
+    await append_audit(
+        session,
+        event_type="payment.decided",
+        payment_id=payment.id,
+        payload={
+            "decision": decision.outcome.value,
+            "reasons": reasons,
+            "mandate_id": mandate_id,
+            "merchant_id": merchant_id,
+            "amount": str(value),
+        },
+        now=now,
     )
 
     if not decision.is_allowed:
-        _move(session, payment, PaymentStatus.BLOCKED)
+        await _move(session, payment, PaymentStatus.BLOCKED, now)
         await session.commit()
         return _response(payment, "BLOCK", reasons)
 
-    # Record the ALLOW before any money moves.
+    # Record the ALLOW and its budget hold before any money moves.
     await session.commit()
 
     try:
@@ -171,11 +150,11 @@ async def _decide_and_pay(
         )
     except Exception:
         log.exception("authorize failed for payment %s", payment.id)
-        return await _fail(session, payment, PaymentStatus.FAILED, AUTHORIZE_FAILED)
+        return await _fail(session, payment, PaymentStatus.FAILED, AUTHORIZE_FAILED, now)
 
     payment.paypal_order_id = auth.order_id
     payment.paypal_authorization_id = auth.authorization_id
-    _move(session, payment, PaymentStatus.AUTHORIZED, order_id=auth.order_id)
+    await _move(session, payment, PaymentStatus.AUTHORIZED, now, order_id=auth.order_id)
     await session.commit()
 
     try:
@@ -189,48 +168,47 @@ async def _decide_and_pay(
         except Exception:
             # The hold stays AUTHORIZED and keeps counting against the budget.
             log.exception("void failed for payment %s", payment.id)
-            return await _fail(session, payment, None, CAPTURE_FAILED)
-        return await _fail(session, payment, PaymentStatus.VOIDED, CAPTURE_FAILED)
+            return await _fail(session, payment, None, CAPTURE_FAILED, now)
+        return await _fail(session, payment, PaymentStatus.VOIDED, CAPTURE_FAILED, now)
 
-    _move(session, payment, PaymentStatus.CAPTURED, capture_status=status)
+    await _move(session, payment, PaymentStatus.CAPTURED, now, capture_status=status)
     await session.commit()
     return _response(payment, "ALLOW", [])
 
 
-async def _usage(session: AsyncSession, mandate_id: str, now: datetime) -> UsageSnapshot:
-    spent = (Payment.mandate_id == mandate_id) & Payment.status.in_(SPENT)
-    budget_used, count = (
-        await session.execute(
-            select(func.coalesce(func.sum(Payment.amount), 0), func.count()).where(spent)
-        )
-    ).one()
-    recent = await session.scalar(
-        select(func.count()).where(spent, Payment.created_at > now - VELOCITY.window)
-    )
-    return UsageSnapshot(
-        budget_used=Decimal(budget_used), payment_count=count, recent_payment_count=recent
-    )
-
-
-def _move(session: AsyncSession, payment: Payment, target: PaymentStatus, **payload) -> None:
+async def _move(
+    session: AsyncSession, payment: Payment, target: PaymentStatus, now: datetime, **payload
+) -> None:
     payment.status = transition(PaymentStatus(payment.status), target)
-    session.add(
-        AuditEvent(
-            event_type=f"payment.{target.lower()}",
-            payment_id=payment.id,
-            payload={"status": target.value, **payload},
-        )
+    await append_audit(
+        session,
+        event_type=f"payment.{target.lower()}",
+        payment_id=payment.id,
+        payload={"status": target.value, **payload},
+        now=now,
     )
 
 
 async def _fail(
-    session: AsyncSession, payment: Payment, target: PaymentStatus | None, reason: dict
+    session: AsyncSession,
+    payment: Payment,
+    target: PaymentStatus | None,
+    reason: dict,
+    now: datetime,
 ) -> dict:
     payment.decision = "BLOCK"
     payment.reasons = [reason]
     if target is None:
-        session.add(AuditEvent(event_type="payment.failed", payment_id=payment.id, payload=reason))
+        await append_audit(
+            session,
+            event_type="payment.failed",
+            payment_id=payment.id,
+            payload={"void_failed": True, **reason},
+            now=now,
+        )
     else:
-        _move(session, payment, target, **reason)
+        # Release before append_audit: mandate row lock, then chain lock (CONTRACTS section 3).
+        await release_budget(session, payment_id=payment.id, now=now)
+        await _move(session, payment, target, now, **reason)
     await session.commit()
     return _response(payment, "BLOCK", [reason])

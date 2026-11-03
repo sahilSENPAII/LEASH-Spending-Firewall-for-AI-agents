@@ -1,6 +1,6 @@
 """Create the signed demo mandate `m_demo` (uses DATABASE_URL and MANDATE_SIGNING_KEY from .env).
 
-Same terms as the orchestrator's DEMO_MANDATE. Run once per database, after `alembic upgrade head`:
+Run once per database, after `alembic upgrade head`:
 cd backend && uv run python -m scripts.seed_demo_mandate
 """
 
