@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal
 
 import httpx
@@ -83,3 +84,91 @@ async def test_paypal_error_carries_status_and_body():
         await pp.authorize(vault_id="V", amount=Decimal("1"), request_id="R")
     assert err.value.status == 422
     assert err.value.action == "create_order"
+
+
+@respx.mock
+async def test_find_order_replays_the_authorize_body_and_never_authorizes():
+    respx.post(f"{BASE}/v1/oauth2/token").respond(200, json=TOKEN)
+    create = respx.post(f"{BASE}/v2/checkout/orders").respond(200, json=_authorized_order())
+    respx.get(f"{BASE}/v2/checkout/orders/O-1").respond(200, json=_authorized_order())
+    authorize = respx.post(f"{BASE}/v2/checkout/orders/O-1/authorize").respond(201, json={})
+    args = {
+        "vault_id": "V",
+        "amount": Decimal("179.00"),
+        "request_id": "KEY",
+        "custom_id": "soundhub",
+        "description": "Sony WH-1000XM5",
+    }
+
+    pp = _client(respx)
+    await pp.authorize(**args)
+    lookup = await pp.find_order(**args)
+
+    original, replay = (call.request for call in create.calls)
+    assert json.loads(replay.content) == json.loads(original.content)
+    assert replay.headers["PayPal-Request-Id"] == "KEY"
+    assert not authorize.called
+    assert (lookup.order_id, lookup.authorization_id) == ("O-1", "A-1")
+    assert lookup.created is False
+
+
+@respx.mock
+async def test_find_order_reads_an_authorization_added_after_the_order_was_created():
+    respx.post(f"{BASE}/v1/oauth2/token").respond(200, json=TOKEN)
+    respx.post(f"{BASE}/v2/checkout/orders").respond(200, json={"id": "O-1", "status": "CREATED"})
+    respx.get(f"{BASE}/v2/checkout/orders/O-1").respond(200, json=_authorized_order())
+
+    lookup = await _client(respx).find_order(vault_id="V", amount=Decimal("1"), request_id="R")
+    assert lookup.authorization_id == "A-1"
+
+
+@respx.mock
+async def test_find_order_reports_a_new_order_without_a_hold():
+    respx.post(f"{BASE}/v1/oauth2/token").respond(200, json=TOKEN)
+    order = {"id": "O-9", "status": "CREATED", "purchase_units": [{}]}
+    respx.post(f"{BASE}/v2/checkout/orders").respond(201, json=order)
+    respx.get(f"{BASE}/v2/checkout/orders/O-9").respond(200, json=order)
+
+    lookup = await _client(respx).find_order(vault_id="V", amount=Decimal("1"), request_id="R")
+    assert lookup.created is True and lookup.authorization_id is None
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    "current",
+    [
+        {"id": "O-1", "status": "COMPLETED", "purchase_units": [{}]},
+        {"id": "O-1", "status": "CREATED", "purchase_units": []},
+    ],
+)
+async def test_find_order_refuses_an_order_it_cannot_read(current):
+    respx.post(f"{BASE}/v1/oauth2/token").respond(200, json=TOKEN)
+    respx.post(f"{BASE}/v2/checkout/orders").respond(200, json={"id": "O-1"})
+    respx.get(f"{BASE}/v2/checkout/orders/O-1").respond(200, json=current)
+
+    with pytest.raises((PayPalError, IndexError)):
+        await _client(respx).find_order(vault_id="V", amount=Decimal("1"), request_id="R")
+
+
+@respx.mock
+async def test_find_order_raises_when_the_order_read_fails():
+    respx.post(f"{BASE}/v1/oauth2/token").respond(200, json=TOKEN)
+    respx.post(f"{BASE}/v2/checkout/orders").respond(200, json={"id": "O-1"})
+    respx.get(f"{BASE}/v2/checkout/orders/O-1").respond(500, json={})
+
+    with pytest.raises(PayPalError) as err:
+        await _client(respx).find_order(vault_id="V", amount=Decimal("1"), request_id="R")
+    assert err.value.action == "get_order"
+
+
+@respx.mock
+async def test_authorization_status_returns_status_and_raises_on_error():
+    respx.post(f"{BASE}/v1/oauth2/token").respond(200, json=TOKEN)
+    respx.get(f"{BASE}/v2/payments/authorizations/A-1").respond(200, json={"status": "CAPTURED"})
+    respx.get(f"{BASE}/v2/payments/authorizations/A-2").respond(404, json={})
+
+    pp = _client(respx)
+    assert await pp.authorization_status("A-1") == "CAPTURED"
+    with pytest.raises(PayPalError) as err:
+        await pp.authorization_status("A-2")
+    assert err.value.action == "get_authorization"
