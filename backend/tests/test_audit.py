@@ -3,33 +3,15 @@ from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import BigInteger, delete, select, update
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy.ext.compiler import compiles
-from sqlalchemy.pool import StaticPool
+from sqlalchemy import delete, select, update
 
 from app import audit, mandates
 from app.audit import GENESIS_HASH, append_audit, entry_hash, verify_chain
 from app.config import Settings
 from app.mandates import MandateTerms, create_mandate, generate_signing_key, revoke_mandate
-from app.models import AuditEvent, Base
+from app.models import AuditEvent
 
 NOW = datetime(2026, 11, 4, 12, 0, tzinfo=UTC)
-
-
-# SQLite only auto-increments INTEGER PRIMARY KEY, so audit_events.id needs INTEGER here.
-@compiles(BigInteger, "sqlite")
-def _sqlite_bigint(type_, compiler, **kw):
-    return "INTEGER"
-
-
-@pytest.fixture
-async def sessions():
-    engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield async_sessionmaker(engine, expire_on_commit=False)
-    await engine.dispose()
 
 
 async def _append(sessions, n=1, **overrides):

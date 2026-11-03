@@ -1,14 +1,12 @@
 import base64
 import dataclasses
+import logging
 from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from sqlalchemy import BigInteger, select, update
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy.ext.compiler import compiles
-from sqlalchemy.pool import StaticPool
+from sqlalchemy import select, update
 
 from app import mandates
 from app.config import Settings
@@ -31,7 +29,7 @@ from app.mandates import (
     verify_mandate,
     verify_signature,
 )
-from app.models import Base, BudgetHold, MandateRow, Payment
+from app.models import BudgetHold, MandateRow, Payment
 from app.policy import Mandate, PaymentRequest
 from app.state import PaymentStatus
 
@@ -198,11 +196,49 @@ def test_verify_mandate_uses_settings_key(monkeypatch):
     assert verify_mandate(record).signature_valid
 
 
-def test_missing_settings_key_fails_closed(monkeypatch):
+def test_missing_settings_key_fails_closed(monkeypatch, caplog):
     monkeypatch.setattr(mandates, "get_settings", lambda: Settings(mandate_signing_key=""))
-    check = verify_mandate(make_record())
+    with caplog.at_level(logging.ERROR, logger="app.mandates"):
+        check = verify_mandate(make_record())
     assert not check.signature_valid
     assert check.mandate is None
+    assert [r.code for r in check.reasons] == ["mandate_key_unavailable"]
+    assert "MANDATE_SIGNING_KEY is not set" in caplog.text
+
+
+def test_wrong_settings_key_is_logged(monkeypatch, caplog):
+    other = generate_signing_key()
+    monkeypatch.setattr(mandates, "get_settings", lambda: Settings(mandate_signing_key=other))
+    with caplog.at_level(logging.WARNING, logger="app.mandates"):
+        check = verify_mandate(make_record())
+    assert [r.code for r in check.reasons] == ["mandate_signature_invalid"]
+    assert "'m_demo' failed signature verification" in caplog.text
+    assert "MANDATE_SIGNING_KEY" in caplog.text
+
+
+def test_unreadable_record_is_logged(caplog):
+    with caplog.at_level(logging.ERROR, logger="app.mandates"):
+        verify_mandate("not a record", public_key=KEY.public_key())  # type: ignore[arg-type]
+    assert "mandate record could not be read" in caplog.text
+
+
+def test_settings_key_is_parsed_once(monkeypatch):
+    key_b64 = generate_signing_key()
+    key = load_signing_key(key_b64)
+    terms = make_terms()
+    record = make_record(terms=terms, signature=sign_terms(terms, key))
+    monkeypatch.setattr(mandates, "get_settings", lambda: Settings(mandate_signing_key=key_b64))
+    calls = []
+
+    def counting_load(value):
+        calls.append(value)
+        return load_signing_key(value)
+
+    monkeypatch.setattr(mandates, "load_signing_key", counting_load)
+    mandates._signing_key.cache_clear()
+    for _ in range(3):
+        assert verify_mandate(record).signature_valid
+    assert calls == [key_b64]
 
 
 # --- keys ------------------------------------------------------------------
@@ -227,12 +263,6 @@ KEY_B64 = generate_signing_key()
 S = PaymentStatus
 
 
-# SQLite only auto-increments INTEGER PRIMARY KEY, so audit_events.id needs INTEGER here.
-@compiles(BigInteger, "sqlite")
-def _sqlite_bigint(type_, compiler, **kw):
-    return "INTEGER"
-
-
 @pytest.fixture
 def settings(monkeypatch):
     value = Settings(
@@ -243,12 +273,9 @@ def settings(monkeypatch):
 
 
 @pytest.fixture
-async def sessions(settings):
-    engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield async_sessionmaker(engine, expire_on_commit=False)
-    await engine.dispose()
+async def sessions(sessions, settings):
+    # The shared SQLite database from conftest.py, with a signing key and velocity limits set.
+    return sessions
 
 
 async def _create(sessions, **overrides):

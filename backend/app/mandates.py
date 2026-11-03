@@ -10,9 +10,11 @@ function here takes the caller's session and never commits; the orchestrator own
 
 import base64
 import binascii
+import logging
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from decimal import Context, Decimal, Inexact, InvalidOperation
+from functools import lru_cache
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
@@ -43,6 +45,9 @@ from app.policy import (
     evaluate_payment,
 )
 from app.state import PaymentStatus
+from app.times import as_utc, require_utc
+
+log = logging.getLogger(__name__)
 
 TERMS_VERSION = 1
 _CENTS = Decimal("0.01")
@@ -55,6 +60,10 @@ RECORD_INVALID = PolicyReason(
     code="invalid_mandate", message="Spending mandate is missing or malformed."
 )
 NOT_FOUND = PolicyReason(code="mandate_not_found", message="No mandate with this ID exists.")
+KEY_UNAVAILABLE = PolicyReason(
+    code="mandate_key_unavailable",
+    message="Leash cannot verify mandates: its signing key is missing or invalid.",
+)
 
 # Payments that no longer hold or take money; every other status counts towards velocity.
 _ENDED_WITHOUT_MONEY = (
@@ -150,16 +159,29 @@ def verify_mandate(
 ) -> MandateCheck:
     """Check the signature and parse the record. Never raises; any problem fails closed.
 
-    `public_key` defaults to the one derived from MANDATE_SIGNING_KEY.
+    `public_key` defaults to the one derived from MANDATE_SIGNING_KEY. Every failure is logged
+    with its real cause, because the BLOCK reason the agent sees is deliberately short.
     """
+    if public_key is None:
+        try:
+            public_key = _signing_key(get_settings().mandate_signing_key).public_key()
+        except ValueError as exc:
+            log.error("cannot verify mandates: %s", exc)
+            return MandateCheck(signature_valid=False, mandate=None, reasons=(KEY_UNAVAILABLE,))
     try:
-        key = public_key or load_signing_key(get_settings().mandate_signing_key).public_key()
-        signature_valid = verify_signature(record.terms, record.signature, key)
+        signature_valid = verify_signature(record.terms, record.signature, public_key)
         mandate = _to_policy_mandate(record)
     except Exception:
+        log.exception("mandate record could not be read")
         return MandateCheck(signature_valid=False, mandate=None, reasons=(RECORD_INVALID,))
-    reasons = () if signature_valid else (SIGNATURE_INVALID,)
-    return MandateCheck(signature_valid=signature_valid, mandate=mandate, reasons=reasons)
+    if not signature_valid:
+        log.warning(
+            "mandate %r failed signature verification: its terms were changed after signing,"
+            " or MANDATE_SIGNING_KEY is not the key it was signed with",
+            record.terms.mandate_id,
+        )
+        return MandateCheck(signature_valid=False, mandate=mandate, reasons=(SIGNATURE_INVALID,))
+    return MandateCheck(signature_valid=True, mandate=mandate, reasons=())
 
 
 def generate_signing_key() -> str:
@@ -178,6 +200,12 @@ def load_signing_key(value: str) -> Ed25519PrivateKey:
         return Ed25519PrivateKey.from_private_bytes(base64.b64decode(value, validate=True))
     except (binascii.Error, ValueError) as exc:
         raise ValueError("MANDATE_SIGNING_KEY is not a base64 Ed25519 private key") from exc
+
+
+@lru_cache(maxsize=4)
+def _signing_key(value: str) -> Ed25519PrivateKey:
+    # Parsed once per key value instead of on every payment; a bad value raises and is not cached.
+    return load_signing_key(value)
 
 
 def public_key_b64(private_key: Ed25519PrivateKey) -> str:
@@ -222,7 +250,7 @@ async def create_mandate(session: AsyncSession, terms: MandateTerms) -> MandateR
         raise ValueError("invalid mandate terms: " + "; ".join(problems))
     if await session.get(MandateRow, terms.mandate_id) is not None:
         raise ValueError(f"mandate {terms.mandate_id!r} already exists")
-    key = load_signing_key(get_settings().mandate_signing_key)
+    key = _signing_key(get_settings().mandate_signing_key)
     row = MandateRow(
         id=terms.mandate_id,
         intent=terms.intent,
@@ -231,9 +259,8 @@ async def create_mandate(session: AsyncSession, terms: MandateTerms) -> MandateR
         total_budget=terms.total_budget,
         max_payment_count=terms.max_payment_count,
         allowed_merchant_ids=sorted(terms.allowed_merchant_ids),
-        # Stored in UTC: SQLite would otherwise keep the local wall time and drop the offset.
-        expires_at=terms.expires_at.astimezone(UTC),
-        created_at=terms.created_at.astimezone(UTC),
+        expires_at=require_utc(terms.expires_at, "expires_at"),
+        created_at=require_utc(terms.created_at, "created_at"),
         signature=sign_terms(terms, key),
         revoked_at=None,
         budget_used=Decimal("0"),
@@ -268,7 +295,7 @@ async def revoke_mandate(session: AsyncSession, mandate_id: str, now: datetime) 
     if row is None:
         raise MandateNotFound(mandate_id)
     if row.revoked_at is None:
-        row.revoked_at = _to_utc(now)
+        row.revoked_at = require_utc(now)
         await session.flush()
         await append_audit(
             session,
@@ -344,7 +371,7 @@ async def check_and_reserve(
             payment_id=payment_id,
             mandate_id=mandate_id,
             amount=request.amount,
-            created_at=now.astimezone(UTC),
+            created_at=require_utc(now),
             released_at=None,
         )
     )
@@ -366,7 +393,7 @@ async def release_budget(session: AsyncSession, *, payment_id: str, now: datetim
         raise ValueError(f"mandate {row.id!r} usage is lower than the hold being released")
     row.budget_used = row.budget_used - hold.amount
     row.payment_count = row.payment_count - 1
-    hold.released_at = _to_utc(now)
+    hold.released_at = require_utc(now)
     await session.flush()
     return True
 
@@ -420,18 +447,6 @@ async def _locked(session: AsyncSession, mandate_id: str) -> MandateRow | None:
     return await session.get(MandateRow, mandate_id, with_for_update=True, populate_existing=True)
 
 
-def _to_utc(value: datetime) -> datetime:
-    if not isinstance(value, datetime) or value.utcoffset() is None:
-        raise ValueError("now must be a timezone-aware datetime")
-    return value.astimezone(UTC)
-
-
-def _utc(value: datetime | None) -> datetime | None:
-    # SQLite returns DateTime(timezone=True) columns without tzinfo; everything is stored in UTC.
-    if value is None or value.tzinfo is not None:
-        return value
-    return value.replace(tzinfo=UTC)
-
 
 def _to_record(row: MandateRow) -> MandateRecord:
     return MandateRecord(
@@ -443,11 +458,11 @@ def _to_record(row: MandateRow) -> MandateRecord:
             total_budget=row.total_budget,
             max_payment_count=row.max_payment_count,
             allowed_merchant_ids=frozenset(row.allowed_merchant_ids),
-            expires_at=_utc(row.expires_at),
-            created_at=_utc(row.created_at),
+            expires_at=as_utc(row.expires_at),
+            created_at=as_utc(row.created_at),
         ),
         signature=row.signature,
-        revoked_at=_utc(row.revoked_at),
+        revoked_at=as_utc(row.revoked_at),
         budget_used=row.budget_used,
         payment_count=row.payment_count,
     )

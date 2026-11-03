@@ -10,13 +10,14 @@ Functions take the caller's session and never commit; the entry commits with the
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.canonical import canonical_json
 from app.models import AuditEvent
+from app.times import as_utc, require_utc
 
 GENESIS_HASH = "0" * 64
 # Any fixed 64-bit number works; it only has to be the same for every append.
@@ -79,10 +80,7 @@ async def append_audit(
         raise ValueError("event_type must be a non-empty string")
     if not isinstance(payload, dict):
         raise TypeError("payload must be a dict")
-    if not isinstance(now, datetime) or now.utcoffset() is None:
-        raise ValueError("now must be a timezone-aware datetime")
-    # Store UTC: SQLite would otherwise keep the local wall time and drop the offset.
-    now = now.astimezone(UTC)
+    now = require_utc(now)
     # Store exactly what is hashed: Decimal and datetime become strings, floats are refused.
     stored_payload = json.loads(canonical_json(payload))
 
@@ -132,7 +130,7 @@ async def verify_chain(session: AsyncSession) -> ChainCheck:
         try:
             good = row.prev_hash == expected_prev and row.hash == entry_hash(
                 expected_prev,
-                created_at=_utc(row.created_at),
+                created_at=as_utc(row.created_at),
                 event_type=row.event_type,
                 payment_id=row.payment_id,
                 payload=row.payload,
@@ -151,10 +149,3 @@ async def _lock_chain(session: AsyncSession) -> None:
     # to the same previous entry. SQLite (tests) allows one writer anyway and has no such function.
     if session.get_bind().dialect.name == "postgresql":
         await session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": _CHAIN_LOCK_KEY})
-
-
-def _utc(value: datetime | None) -> datetime | None:
-    # SQLite returns DateTime(timezone=True) columns without tzinfo; entries are written in UTC.
-    if value is None or value.tzinfo is not None:
-        return value
-    return value.replace(tzinfo=UTC)

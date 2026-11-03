@@ -54,6 +54,21 @@ class MandateCheck:
 - `create_mandate` rejects bad terms (the same validation `policy.py` applies) with `ValueError`.
 - `revoke_mandate` is idempotent; revoking twice keeps the first `revoked_at`.
 
+Added while building (Nov 3), all in `backend/app/mandates.py`:
+- `get_mandate(session, mandate_id) -> MandateRecord | None`, for `/payments` and `list_mandates`.
+- `revoke_mandate` raises `MandateNotFound` (a `LookupError`) for an unknown id.
+- `create_mandate` raises `ValueError` for bad terms (see `validate_terms`), an existing id, or a
+  missing `MANDATE_SIGNING_KEY`. It writes a `mandate.created` audit entry; the first revoke writes
+  `mandate.revoked`.
+- `MandateRecord` = `terms` (signed), `signature`, `revoked_at`, `budget_used`, `payment_count`.
+- `verify_mandate` reasons: `mandate_key_unavailable` (signing key missing or invalid on this server),
+  `invalid_mandate` (record unreadable), `mandate_signature_invalid` (terms changed, or a different
+  key). Each failure is also logged with its real cause.
+- **One key per database.** Every server using the same database must have the same
+  `MANDATE_SIGNING_KEY`; under a different key every mandate fails verification and every payment
+  blocks.
+- Times: pass timezone-aware datetimes; everything is stored in UTC.
+
 ## 2. Policy + budget hold — `backend/app/policy.py`, `backend/app/mandates.py` (Anurag)
 
 `evaluate_payment` (exists) is pure and never called directly by the orchestrator. The orchestrator
@@ -88,6 +103,16 @@ async def release_budget(session, *, payment_id: str, now: datetime) -> bool
 
 `release_budget` reverses step 5 for a payment and sets `released_at`. Returns `True` if a hold was
 released, `False` if there was none or it was already released (safe to call twice).
+
+Added while building (Nov 3):
+- Unknown `mandate_id` returns BLOCK with reason `mandate_not_found` (no exception).
+- `check_and_reserve` raises `ValueError` if `payment_id` already has a hold (a retry must reuse
+  the first decision, not hold twice). `release_budget` raises `ValueError` if the mandate's usage
+  is lower than the hold (inconsistent data).
+- A naive `now`: `release_budget` and `revoke_mandate` raise `ValueError`; `check_and_reserve`
+  returns BLOCK with `invalid_evaluation_time` (from the policy).
+- Velocity limits come from settings `VELOCITY_MAX_PAYMENTS` (3) and `VELOCITY_WINDOW_SECONDS` (600).
+- The payment row must be flushed before `check_and_reserve` (the hold references `payments.id`).
 
 **When the orchestrator calls `release_budget`:** a held payment ends in any terminal state other
 than `CAPTURED`: `DENIED`, `EXPIRED`, `FAILED`, `VOIDED`, or `BLOCKED` by a later check (judge or
@@ -131,6 +156,17 @@ class ChainCheck:
 - `append_audit` runs in the same transaction as the state change it records. If it fails, the
   transaction fails, so there is no decision without an audit entry.
 - `GET /audit/verify` returns `ChainCheck` as JSON (route in Sahil's API, body from `verify_chain`).
+
+- **Every** `audit_events` write must go through `append_audit`. A row inserted directly has no
+  hash: `verify_chain` reports it as the first bad entry and `append_audit` refuses to extend it
+  (`ValueError`), so the chain is never silently skipped (D13).
+- `append_audit` raises `TypeError` / `ValueError` for a float in the payload, a naive `now` or an
+  empty `event_type`. The payload is stored exactly as hashed (Decimal and datetime become strings).
+- **Lock order (avoids deadlocks):** in one transaction, call `check_and_reserve` /
+  `release_budget` / `revoke_mandate` (mandate row lock) **before** `append_audit` (chain lock),
+  never the other way round.
+- Also exported: `entry_hash(...)` and `GENESIS_HASH` (`"0" * 64`), for tests and the console.
+
 - Event types Anurag's side writes: `mandate.created`, `mandate.revoked`. The orchestrator writes
   payment events: `payment.decided`, `payment.blocked`, `payment.authorized`, `payment.captured`,
   `payment.voided`, `payment.failed`, `approval.requested`, `approval.approved`, `approval.denied`,
