@@ -103,9 +103,15 @@ Ask Sahil for the shared sandbox values.
 
 ## Log (newest first)
 
+### 2026-11-03 23:11 IST — Anurag + Claude
+- Compared `audit-chain-ALL-CHANGES.txt` with the repo; the code files, tests, D13, and Learn notes were already present.
+- Added the supplied mutation-check summary to the audit handoff log. No code changes were needed.
+- Files: `CONTEXT.md`.
+
 ### 2026-11-03 23:08 IST — Anurag + Claude
 - Merged audit chain commit `88bf54c` into `main`: `append_audit`, `verify_chain`, `GET /audit/verify`, and `mandate.created` / `mandate.revoked` events. D13 documents fail-closed handling of unhashed rows and the tail-truncation limit.
 - Normalized mandate, hold, and audit timestamps to UTC before storage; naive timestamps are rejected where audit or mandate state is written. All 271 tests pass and Ruff is clean.
+- The supplied audit-change notes report eight deliberate fault checks, each caught by a test: missing `prev_hash`, skipped link validation, missing UTC conversion, missing lock, extending an unhashed row, raw payload storage, non-UTC mandate times, and a missing revoke event.
 - The Neon migration and seed have not been run. Sahil's orchestrator still writes audit rows directly; switch all writes to `append_audit` before any payment on Neon after the seed.
 - Files: `backend/app/{audit,main,mandates}.py`, `backend/tests/test_{audit,mandates}.py`, `docs/DECISIONS.md` (D13), `docs/LEARN.md`, `CONTEXT.md`.
 
