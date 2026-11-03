@@ -33,7 +33,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 |---|---|---|---|
 | M0 | Oct 30–31 | Setup + 3 de-risking spikes | **Done** |
 | M1 | Oct 31–Nov 1 | Thin end-to-end flow + deploy: Claude pays $1 sandbox via hosted Leash | Local flow **done** (Claude Desktop paid $1 sandbox through the orchestrator); hosted deploy pending (Sahil, Render) |
-| M2 | Nov 2–3 | Mandates (Ed25519), policy engine, state machine, idempotency, saga, hash-chained audit | **Mostly done**: policy, signed mandates, budget holds, audit chain (Anurag); state machine, idempotency keys, void on capture failure (Sahil). Orchestrator switch to `check_and_reserve` / `release_budget` / `append_audit` and migration `0002` on Neon **done** (Nov 3) |
+| M2 | Nov 2–3 | Mandates (Ed25519), policy engine, state machine, idempotency, saga, hash-chained audit | **Mostly done**: policy, signed mandates, budget holds, audit chain (Anurag); state machine, idempotency keys, void on capture failure (Sahil). Orchestrator switch to `check_and_reserve` / `release_budget` / `append_audit` and migration `0002` on Neon **done** (Nov 3). Budget lock proven on Neon under concurrency; saga reconcile added (Nov 4) |
 | M3 | Nov 4–5 | Attack demo: SoundHub + MegaDeals stores, LangGraph agent, injection blocked | — |
 | M4 | Nov 6–7 | Groq intent judge + XGBoost/SHAP anomaly model | — |
 | M5 | Nov 8 | Step-up approval via web page, survives restart | — |
@@ -120,6 +120,10 @@ Ask Sahil for the shared sandbox values.
 - [ ] Sahil: `request_payment(mandate_id, merchant_id, items=[{sku, quantity}])` with a shared catalog
       (Leash computes the amount) + demo stores.
 - [ ] Sahil (minor): fix the three `0001` nullable mismatches.
+- [x] Sahil: Postgres concurrency test for `check_and_reserve` (passed on Neon) and saga reconcile
+      (`app/reconcile.py`, `scripts/reconcile_payments.py`), merged to `main` as `24dbb07` (Nov 4).
+- [ ] Sahil: run `reconcile_payments` once against PayPal sandbox (not yet run against Neon/PayPal);
+      decide whether to schedule it; cover `AWAITING_APPROVAL` once M5 approvals exist.
       Prices come from the shared catalog; the agent sends no price or amount. Update
       `docs/CONTRACTS.md` section 5.5.
 - [ ] Sahil (Nov 4 evening): demo stores at `http://localhost:8101` (SoundHub) and
@@ -138,6 +142,20 @@ Ask Sahil for the shared sandbox values.
       setting so switching to HTTP is one line.
 
 ## Log (newest first)
+
+### 2026-11-04 00:25 IST — Sahil + Claude
+- Merged to `main` (`24dbb07`): Postgres-only race test in `tests/test_mandates.py` (runs only when
+  `LEASH_PG_TEST_URL` is set in the shell; not in `.env.example` because it is read from the shell),
+  saga reconcile (`app/reconcile.py`, `scripts/reconcile_payments.py`, `PayPalClient.find_order`), and the
+  race test cleanup fix. 330 passed, 1 skipped (the Postgres test).
+- Race test on Neon: two $6 reserves on a $10 mandate -> one ALLOW, one BLOCK `budget_exceeded`; with the
+  row lock removed the test fails. `/audit/verify` stayed ok throughout.
+- Neon cleanup: deleted the leftover `m_pgtest_%` rows from `payments` and `budget_holds` by SQL. The two
+  revoked `m_pgtest_*` mandates stay (audit entries refer to them). `m_demo` untouched.
+- Reconcile has run only against fake PayPal. Do not run it on Neon until it is tried in sandbox. Its
+  `REQUESTED` check replays the create-order call, which can place a brief hold that it voids.
+  Event names added to `docs/CONTRACTS.md` section 5.3.
+- Files: `CONTEXT.md`, `docs/CONTRACTS.md`.
 
 ### 2026-11-03 23:57 IST — Anurag + Codex
 - Added `backend/scripts/check_setup.py`, README step 8, and 12 checker tests. The checker is

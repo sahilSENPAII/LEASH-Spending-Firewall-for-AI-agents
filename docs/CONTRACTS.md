@@ -280,6 +280,19 @@ Approvals (M5): approve → re-enter at step 4; deny → `DENIED`, `release_budg
 `append_audit("approval.denied")`; expiry job → `EXPIRED`, `release_budget`,
 `append_audit("approval.expired")`. Approve on an expired or decided payment is rejected.
 
+Reconcile (`app/reconcile.py`, `scripts/reconcile_payments.py`): settles payments left in `REQUESTED`
+or `AUTHORIZED` for N minutes (default 15, minimum 5) with PayPal as the source of truth, for when a
+DB write failed after a PayPal call. Run by hand on a laptop; nothing schedules it yet, and it does not
+look at `AWAITING_APPROVAL`. A `REQUESTED` row is checked by replaying the create-order call with its
+idempotency key (PayPal keeps keys for 6 hours, so rows older than 5 hours are left for manual review);
+a replay that creates a new order is voided at once. Releases come before `append_audit` in each
+transaction. Events:
+- `payment.reconciled_lookup`: the replay found an authorization; order and authorization IDs saved
+- `payment.reconciled_authorized`: a `REQUESTED` row had a real authorization
+- `payment.reconciled_captured`: PayPal shows it captured; hold kept
+- `payment.reconciled_voided`: hold voided at PayPal or already gone; budget released
+- `payment.reconciled_failed`: no hold, or only the lookup's own hold; budget released
+
 ### 5.4 Decision response (MCP `request_payment` and REST `/payments/{id}`)
 ```json
 {
