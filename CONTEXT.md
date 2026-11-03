@@ -81,7 +81,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Codex: LangGraph attack agent (Nov 4–6), waiting on Sahil's answers about the demo stores, MCP transport, and `request_payment` arguments.
+- Anurag + Codex: pre-agent cleanup (shared signing-key guidance and contract spacing) on `anurag`; then LangGraph attack agent.
 - Sahil + Claude: orchestrator switch to `check_and_reserve` / `release_budget` / `append_audit`
   (branch `sahil`). Then: HTTP MCP transport + `list_mandates` / `get_payment_status`, Render deploy
   ($50 credits claimed, no card), Groq intent judge (`app/judge.py`).
@@ -111,6 +111,12 @@ Ask Sahil for the shared sandbox values.
 - [ ] Anurag: LangGraph attack agent (Nov 4–6).
 
 ## Log (newest first)
+
+### 2026-11-03 23:35 IST — Anurag + Codex
+- Claimed the pre-agent cleanup: correct the signing-key guidance and remove two stray contract blank lines. Code/docs changes will be on `anurag`; handoff updates stay on `main`.
+- Files: `CONTEXT.md`.
+
+
 
 ### 2026-11-03 23:30 IST — Sahil + Claude
 - Ran `alembic upgrade head` (`0002`) and `scripts.seed_demo_mandate` on Neon. Checked read-only:
