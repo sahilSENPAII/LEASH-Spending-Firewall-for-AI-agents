@@ -32,8 +32,8 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 | ID | Dates | Goal | Status |
 |---|---|---|---|
 | M0 | Oct 30–31 | Setup + 3 de-risking spikes | **Done** |
-| M1 | Oct 31–Nov 1 | Thin end-to-end flow + deploy: Claude pays $1 sandbox via hosted Leash | Next |
-| M2 | Nov 2–3 | Mandates (Ed25519), policy engine, state machine, idempotency, saga, hash-chained audit | — |
+| M1 | Oct 31–Nov 1 | Thin end-to-end flow + deploy: Claude pays $1 sandbox via hosted Leash | Local flow **done** (Claude Desktop paid $1 sandbox through the orchestrator); hosted deploy pending (Sahil, Render) |
+| M2 | Nov 2–3 | Mandates (Ed25519), policy engine, state machine, idempotency, saga, hash-chained audit | **Mostly done**: policy, signed mandates, budget holds, audit chain (Anurag); state machine, idempotency keys, void on capture failure (Sahil). Pending: orchestrator switch to `check_and_reserve` / `release_budget` / `append_audit`, migration `0002` on Neon |
 | M3 | Nov 4–5 | Attack demo: SoundHub + MegaDeals stores, LangGraph agent, injection blocked | — |
 | M4 | Nov 6–7 | Groq intent judge + XGBoost/SHAP anomaly model | — |
 | M5 | Nov 8 | Step-up approval via web page, survives restart | — |
@@ -64,6 +64,13 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 - PayPal API is **not** reachable from Claude's cloud sandbox: anything calling PayPal must be run on a
   laptop.
 
+- Trust-path polish is merged to `main`: a missing or malformed `MANDATE_SIGNING_KEY` is logged and
+  blocks with `mandate_key_unavailable`; a wrong but well-formed key logs signature verification
+  failure and blocks with `mandate_signature_invalid`. Key parsing is cached; shared UTC helper
+  `app/times.py` and shared test setup `tests/conftest.py` replace duplicates. `docs/CONTRACTS.md`
+  documents errors, one key per database, audit writes through `append_audit`, and lock order. README
+  has database setup steps. 274 tests pass.
+
 ## Env vars (names only — values live in each person's local `.env`)
 `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_BASE_URL`, `SANDBOX_BUYER_EMAIL`,
 `MERCHANT_SOUNDHUB_EMAIL`, `MERCHANT_MEGADEALS_EMAIL`, `PLATFORM_MERCHANT_EMAIL`, `GROQ_API_KEY`,
@@ -73,7 +80,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Claude: trust-path polish (key diagnostics/caching, shared time and test helpers, contract and README updates) on `anurag`; then LangGraph attack agent.
+- Anurag + Codex: LangGraph attack agent (Nov 4–6), waiting on Sahil's answers about the demo stores, MCP transport, and `request_payment` arguments.
 - Sahil + Claude: paused (back later on Nov 2). Next: Groq intent judge (`app/judge.py`), HTTP MCP
   transport + `list_mandates` / `get_payment_status`, Render deploy ($50 credits claimed, no card).
 
@@ -102,6 +109,17 @@ Ask Sahil for the shared sandbox values.
 - [ ] Anurag: LangGraph attack agent (Nov 4–6).
 
 ## Log (newest first)
+
+### 2026-11-03 23:27 IST — Anurag + Codex
+- Trust-path polish: a missing or malformed `MANDATE_SIGNING_KEY` is logged and blocks with
+  `mandate_key_unavailable`; a wrong valid key logs signature verification failure and blocks with
+  `mandate_signature_invalid`. Key parsing is cached; shared UTC and SQLite test helpers replace copies.
+- Extended `docs/CONTRACTS.md` with implemented APIs, failure behavior, and lock order; added README
+  database setup instructions. Updated M1 and M2 milestones.
+- All 274 tests pass; Ruff is clean. Four key logging/cache regression tests fail against the previous
+  `mandates.py`. Tests ran on Python 3.14.7; Python 3.12 is not installed in this workspace.
+- Files: `backend/app/{times,mandates,audit}.py`, `backend/tests/{conftest,test_mandates,test_audit}.py`,
+  `docs/CONTRACTS.md`, `README.md`, `CONTEXT.md`.
 
 ### 2026-11-03 23:22 IST — Anurag + Codex
 - Claimed the trust-path polish on `anurag`; code changes will stay on the code branch and handoff updates will be pushed directly to `main`.
