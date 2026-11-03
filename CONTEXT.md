@@ -73,7 +73,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Claude: none — trust-path backend for sync 1 is done; waiting on Sahil's orchestrator switch. Next: LangGraph attack agent.
+- Anurag + Claude: trust-path polish (key diagnostics/caching, shared time and test helpers, contract and README updates) on `anurag`; then LangGraph attack agent.
 - Sahil + Claude: paused (back later on Nov 2). Next: Groq intent judge (`app/judge.py`), HTTP MCP
   transport + `list_mandates` / `get_payment_status`, Render deploy ($50 credits claimed, no card).
 
@@ -102,6 +102,11 @@ Ask Sahil for the shared sandbox values.
 - [ ] Anurag: LangGraph attack agent (Nov 4–6).
 
 ## Log (newest first)
+
+### 2026-11-03 23:22 IST — Anurag + Codex
+- Claimed the trust-path polish on `anurag`; code changes will stay on the code branch and handoff updates will be pushed directly to `main`.
+- Files: `CONTEXT.md`.
+
 
 ### 2026-11-03 23:11 IST — Anurag + Claude
 - Compared `audit-chain-ALL-CHANGES.txt` with the repo; the code files, tests, D13, and Learn notes were already present.
