@@ -1,15 +1,22 @@
+import asyncio
 import base64
 import dataclasses
 import logging
+import os
+import uuid
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app import mandates
+from app.audit import verify_chain
 from app.config import Settings
+from app.db import to_async_url
 from app.mandates import (
     MandateNotFound,
     MandateRecord,
@@ -30,7 +37,7 @@ from app.mandates import (
     verify_signature,
 )
 from app.models import BudgetHold, MandateRow, Payment
-from app.policy import Mandate, PaymentRequest
+from app.policy import Mandate, PaymentRequest, PolicyOutcome
 from app.state import PaymentStatus
 
 NOW = datetime(2026, 11, 2, 12, 0, tzinfo=UTC)
@@ -596,3 +603,70 @@ async def test_release_refuses_to_go_below_zero(sessions):
     async with sessions() as s:
         with pytest.raises(ValueError, match="lower than the hold"):
             await release_budget(s, payment_id=pid, now=PAY_NOW)
+
+
+# --- Postgres only: the mandate row lock under concurrency ---------------------
+
+PG_TEST_URL = os.environ.get("LEASH_PG_TEST_URL", "")
+
+
+@pytest.mark.skipif(not PG_TEST_URL, reason="set LEASH_PG_TEST_URL to run against real Postgres")
+async def test_concurrent_reserves_cannot_overspend_on_postgres():
+    url, needs_ssl = to_async_url(PG_TEST_URL)
+    engine = create_async_engine(url, connect_args={"ssl": True} if needs_ssl else {})
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    now = datetime.now(UTC)
+    mandate_id = f"m_pgtest_{uuid.uuid4().hex[:12]}"
+    payment_ids = []
+    created = False
+    try:
+        async with sessions() as s:
+            await create_mandate(
+                s,
+                make_terms(
+                    mandate_id=mandate_id,
+                    max_payment_amount=Decimal("10.00"),
+                    total_budget=Decimal("10.00"),
+                    max_payment_count=5,
+                    created_at=now,
+                    expires_at=now + timedelta(hours=1),
+                ),
+            )
+            await s.commit()
+        created = True
+        for _ in range(2):
+            payment_ids.append(
+                await _payment(sessions, amount="6.00", created_at=now, mandate_id=mandate_id)
+            )
+
+        # Open both connections first so connecting does not serialize the two calls.
+        async with engine.connect(), engine.connect():
+            pass
+        decisions = await asyncio.gather(
+            *(
+                _reserve(sessions, pid, amount="6.00", mandate_id=mandate_id, now=now)
+                for pid in payment_ids
+            )
+        )
+
+        assert sorted(d.outcome for d in decisions) == [PolicyOutcome.ALLOW, PolicyOutcome.BLOCK]
+        assert [_codes(d) for d in decisions if not d.is_allowed] == [["budget_exceeded"]]
+        async with sessions() as s:
+            record = await get_mandate(s, mandate_id)
+            holds = (
+                await s.scalars(select(BudgetHold).where(BudgetHold.mandate_id == mandate_id))
+            ).all()
+        assert (record.budget_used, record.payment_count) == (Decimal("6.00"), 1)
+        assert len(holds) == 1
+    finally:
+        async with sessions() as s:
+            for pid in payment_ids:
+                # Without the lock both reserves pass and usage ends lower than the holds.
+                with suppress(ValueError):
+                    await release_budget(s, payment_id=pid, now=datetime.now(UTC))
+            if created:
+                await revoke_mandate(s, mandate_id, datetime.now(UTC))
+            await s.commit()
+            chain = await verify_chain(s)
+        await engine.dispose()
+    assert chain.ok
