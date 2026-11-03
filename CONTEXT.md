@@ -43,7 +43,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1â
 
 ## Current state
 - M0 complete. Repo layout exists. `backend/app/policy.py` now contains a standalone deterministic evaluator; `agent/`, `stores/`, `frontend/`, and `ml/` remain placeholders.
-- The policy evaluator is integrated into `backend/app/orchestrator.py`, which persists payment and audit state in Postgres. The main orchestrator still uses hardcoded `DEMO_MANDATE` and an unlocked `_usage()` query. `check_and_reserve` / `release_budget` are on `main` (`f3de389`, merged at `f50199f`) but are not wired into the payment flow yet.
+- The policy evaluator is integrated into `backend/app/orchestrator.py`, which persists payment and audit state in Postgres. The main orchestrator now uses `check_and_reserve` / `release_budget` / `append_audit`; it removed `DEMO_MANDATE` and `_usage()` in the Sahil merge (`31dcdfb`).
 - Mandates part 1: `app/canonical.py` (canonical JSON) and `app/mandates.py` (`MandateTerms` including signed `intent`, `MandateRecord` with `budget_used`/`payment_count`, Ed25519 sign/verify, and fail-closed `verify_mandate`). The 202 backend tests pass.
 - Mandates part 2 is implemented and pushed on `anurag` (`f3de389`, merged into `main` at `f50199f`): `mandates` and `budget_holds` tables, mandate CRUD, atomic budget holds, and velocity counting. The 235-test suite passes.
 - Audit chain is implemented in `backend/app/audit.py`: `append_audit` links entries with SHA-256 over the previous hash and canonical JSON under a Postgres advisory lock; `verify_chain` returns `ChainCheck`, and `GET /audit/verify` is available. Mandate create/revoke write audit events, and mandate, hold, and audit timestamps are stored in UTC. D13 records the chain rules and tail-truncation limit. The 271-test suite passes.
@@ -57,7 +57,10 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1â
 - The policy evaluator's 109 unit tests and exact Decimal budget check are now merged to `main`.
 - `backend/tests/test_policy.py` passes Sahil's Ruff 0.17.3 CI rules; the lint fix is merged to `main`.
 - README test instructions and D12's exact-budget decision are now merged into `main` from `anurag`.
-- Contracts agreed (Nov 2): Sahil said yes to all 4 open questions and the `check_and_reserve` design. Section 5 and `payment.blocked` are in `docs/CONTRACTS.md`; Sahil updated the app paths and renamed `payment.error` to `payment.failed`. The `void_failed` audit payload remains pending.
+- Contracts agreed (Nov 2): Sahil said yes to all 4 open questions and the `check_and_reserve` design.
+  Section 5 and `payment.blocked` are in `docs/CONTRACTS.md`; Sahil updated the app paths and renamed
+  `payment.error` to `payment.failed`. The merged orchestrator records `void_failed` if capture and
+  void both fail.
 - Sahil: real Claude Desktop -> orchestrator -> PayPal sandbox $1 payment to SoundHub captured; MegaDeals and $250 blocked by `policy.py` (149 tests pass).
 - Policy engine moved to `backend/app/policy.py` (import `app.policy`). Root `pytest.ini` and `backend/requirements-dev.txt` removed. Tests and lint only via `uv run pytest` / `uv run ruff check app tests scripts` from `backend/` (149 pass).
 - Sahil agreed: migration `0002` includes a clearly named one-off step that deletes all `audit_events` rows (test data only); `payments` is untouched.
@@ -75,6 +78,11 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1â
   documents errors, one key per database, audit writes through `append_audit`, and lock order. README
   has database setup steps. `gen_mandate_key.py` now says one key per database. 274 tests pass.
 
+- Read-only setup checker: `cd backend && uv run python -m scripts.check_setup` reports database
+  reachability, a shareable signing-key fingerprint, migration `0002`, `m_demo` signature, and audit
+  chain validity; it never writes. Anurag's Neon check is pending because `DATABASE_URL` is not set in
+  the local `.env`. Public-key fingerprint: `3c914ba04924`. The current suite has 287 passing tests.
+
 ## Env vars (names only â€” values live in each person's local `.env`)
 `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_BASE_URL`, `SANDBOX_BUYER_EMAIL`,
 `MERCHANT_SOUNDHUB_EMAIL`, `MERCHANT_MEGADEALS_EMAIL`, `PLATFORM_MERCHANT_EMAIL`, `GROQ_API_KEY`,
@@ -84,7 +92,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1â
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Codex: read-only setup checker on `anurag`; run local tests and the Neon check, then wait for the user's LangGraph materials.
+- Anurag + Codex: setup checker merged; Neon verification is pending until `DATABASE_URL` is added to the ignored local `.env`. LangGraph is next after the user provides materials.
 - Sahil + Claude: next is `request_payment(mandate_id, merchant_id, items=[{sku, quantity}])` with a
   shared server-side catalog and the demo stores (SoundHub :8101, MegaDeals :8102); then HTTP MCP
   transport + `list_mandates` / `get_payment_status`, Render deploy, Groq intent judge (`app/judge.py`).
@@ -102,6 +110,10 @@ Ask Sahil for the shared sandbox values.
 - [x] Anurag: hash-chained audit log + `/audit/verify` (merged into `main` as `88bf54c`).
 - [x] Both: agree on one shared `MANDATE_SIGNING_KEY` for the Neon database (shared by DM) and choose who runs migration `0002` (Sahil).
 - [x] Sahil: run migration `0002` and seed `m_demo` on Neon (Nov 3).
+- [ ] Anurag: add `DATABASE_URL` from Sahil to the ignored local `.env` and run the checker against
+      Neon; expect 5/5 checks before sync 1 (Nov 4).
+- [ ] Sahil: run `uv run python -m scripts.check_setup` on your machine and on Render after deploy;
+      the key fingerprint must match Anurag's.
 - [x] Sahil: orchestrator switch to `check_and_reserve` / `release_budget` / `append_audit`; payment row
       flushed first, mandate-before-audit lock order, UTC `now`, no floats, `DEMO_MANDATE` and
       `_usage()` removed (merged to `main` as `31dcdfb`, Nov 3).
@@ -121,12 +133,21 @@ Ask Sahil for the shared sandbox values.
       (merged into `main` from `sahil`).
 - [x] Sahil: MCP `request_payment` + orchestrator (merged into `main` from `sahil`).
 - [ ] Sahil: MCP `list_mandates` / `get_payment_status`.
-- [ ] Sahil: Render deploy.
 - [ ] Anurag: LangGraph attack agent (Nov 4â€“6), after the user provides materials and steps. Start
       with stdio MCP via the LangGraph MCP client adapter; keep the Leash transport in one config
       setting so switching to HTTP is one line.
 
 ## Log (newest first)
+
+### 2026-11-03 23:57 IST â€” Anurag + Codex
+- Added `backend/scripts/check_setup.py`, README step 8, and 12 checker tests. The checker is
+  read-only and reports the database, signing-key fingerprint, migration, `m_demo`, and audit chain.
+- The checker stopped at the database check because `DATABASE_URL` is absent from Anurag's local
+  `.env`; Neon verification remains pending. Fingerprint: `3c914ba04924`. No migration or seed was run.
+- All 287 backend tests pass; Ruff is clean. LangGraph work remains unstarted pending the user's
+  materials.
+- Files: `backend/scripts/check_setup.py`, `backend/tests/test_check_setup.py`, `README.md`,
+  `CONTEXT.md`.
 
 ### 2026-11-03 23:52 IST â€” Anurag + Codex
 - Claimed the read-only setup checker: verify database reachability, key fingerprint, migration, `m_demo` signature, and audit chain. No database writes.
