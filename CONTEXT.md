@@ -33,7 +33,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 |---|---|---|---|
 | M0 | Oct 30–31 | Setup + 3 de-risking spikes | **Done** |
 | M1 | Oct 31–Nov 1 | Thin end-to-end flow + deploy: Claude pays $1 sandbox via hosted Leash | Local flow **done** (Claude Desktop paid $1 sandbox through the orchestrator); hosted deploy pending (Sahil, Render) |
-| M2 | Nov 2–3 | Mandates (Ed25519), policy engine, state machine, idempotency, saga, hash-chained audit | **Mostly done**: policy, signed mandates, budget holds, audit chain (Anurag); state machine, idempotency keys, void on capture failure (Sahil). Pending: orchestrator switch to `check_and_reserve` / `release_budget` / `append_audit`, migration `0002` on Neon |
+| M2 | Nov 2–3 | Mandates (Ed25519), policy engine, state machine, idempotency, saga, hash-chained audit | **Mostly done**: policy, signed mandates, budget holds, audit chain (Anurag); state machine, idempotency keys, void on capture failure (Sahil). Orchestrator switch to `check_and_reserve` / `release_budget` / `append_audit` and migration `0002` on Neon **done** (Nov 3) |
 | M3 | Nov 4–5 | Attack demo: SoundHub + MegaDeals stores, LangGraph agent, injection blocked | — |
 | M4 | Nov 6–7 | Groq intent judge + XGBoost/SHAP anomaly model | — |
 | M5 | Nov 8 | Step-up approval via web page, survives restart | — |
@@ -51,7 +51,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
   the migration or seed on Neon.
 - One shared `MANDATE_SIGNING_KEY` is in use for Neon and was shared by DM. Keep the value only in
   ignored local `.env` files; provision it securely to Render.
-- No payments on Neon until the orchestrator switch is merged: `backend/app/orchestrator.py` on `main` still writes `AuditEvent(...)` directly; those unhashed rows break `/audit/verify` and make the next append fail closed.
+- The orchestrator switch is merged (`31dcdfb`): every payment holds budget with `check_and_reserve`, releases it on FAILED/VOIDED, and writes audit events through `append_audit`. Payments on Neon are safe again.
 - Task split agreed (`task-split.md`): Sahil = money path + Groq judge; Anurag = trust path + XGBoost/SHAP + LangGraph agent.
 - Workflow docs are split: human handoff rules live in `CONTEXT.md`; agent-specific rules live in `AGENTS.md`. Both are maintained directly on `main`; code goes on task branches and through PRs.
 - The policy evaluator's 109 unit tests and exact Decimal budget check are now merged to `main`.
@@ -85,9 +85,9 @@ Ask Sahil for the shared sandbox values.
 
 ## In progress
 - Anurag + Codex: pre-agent fixes are complete; waiting for the user's LangGraph materials and steps before implementation.
-- Sahil + Claude: orchestrator switch to `check_and_reserve` / `release_budget` / `append_audit`
-  (branch `sahil`). Then: HTTP MCP transport + `list_mandates` / `get_payment_status`, Render deploy
-  ($50 credits claimed, no card), Groq intent judge (`app/judge.py`).
+- Sahil + Claude: next is `request_payment(mandate_id, merchant_id, items=[{sku, quantity}])` with a
+  shared server-side catalog and the demo stores (SoundHub :8101, MegaDeals :8102); then HTTP MCP
+  transport + `list_mandates` / `get_payment_status`, Render deploy, Groq intent judge (`app/judge.py`).
 
 ## Next up
 - [x] Sahil: Python 3.12 via uv; Neon project `leash` (AWS us-east-1), `DATABASE_URL` in `.env`.
@@ -102,10 +102,12 @@ Ask Sahil for the shared sandbox values.
 - [x] Anurag: hash-chained audit log + `/audit/verify` (merged into `main` as `88bf54c`).
 - [x] Both: agree on one shared `MANDATE_SIGNING_KEY` for the Neon database (shared by DM) and choose who runs migration `0002` (Sahil).
 - [x] Sahil: run migration `0002` and seed `m_demo` on Neon (Nov 3).
-- [ ] Sahil (Nov 4, 2 PM IST): orchestrator switch to `check_and_reserve` / `release_budget` /
-      `append_audit`; flush the payment row first, keep the mandate-before-audit lock order, use UTC
-      `now`, avoid floats, drop `DEMO_MANDATE` and `_usage()`, fix the three `0001` nullable
-      mismatches, and update `request_payment(mandate_id, merchant_id, items=[{sku, quantity}])`.
+- [x] Sahil: orchestrator switch to `check_and_reserve` / `release_budget` / `append_audit`; payment row
+      flushed first, mandate-before-audit lock order, UTC `now`, no floats, `DEMO_MANDATE` and
+      `_usage()` removed (merged to `main` as `31dcdfb`, Nov 3).
+- [ ] Sahil: `request_payment(mandate_id, merchant_id, items=[{sku, quantity}])` with a shared catalog
+      (Leash computes the amount) + demo stores.
+- [ ] Sahil (minor): fix the three `0001` nullable mismatches.
       Prices come from the shared catalog; the agent sends no price or amount. Update
       `docs/CONTRACTS.md` section 5.5.
 - [ ] Sahil (Nov 4 evening): demo stores at `http://localhost:8101` (SoundHub) and
@@ -125,6 +127,19 @@ Ask Sahil for the shared sandbox values.
       setting so switching to HTTP is one line.
 
 ## Log (newest first)
+
+### 2026-11-03 23:50 IST — Sahil + Claude
+- Orchestrator switch merged to `main` (`31dcdfb`, from `sahil` `be6acf7`): payment row flushed first,
+  `check_and_reserve` / `release_budget` / `append_audit`, `DEMO_MANDATE` and `_usage()` removed.
+  275 tests pass.
+- Verified on Neon with the real MCP server: $1 to soundhub -> ALLOW, CAPTURED; megadeals -> BLOCK
+  `merchant_not_allowed`; `GET /audit/verify` -> `{"ok": true, "checked": 6, "first_bad_id": null}`.
+- Behaviour changes: unknown mandate now blocks with `mandate_not_found`; velocity comes from
+  `VELOCITY_MAX_PAYMENTS` / `VELOCITY_WINDOW_SECONDS` (defaults 3 / 600) and counts every payment that
+  holds or may hold money. Render needs these env vars.
+- Known gap: if a DB write fails after PayPal authorized or captured, the row can stay REQUESTED or
+  AUTHORIZED while money is held or taken (needs saga cleanup). Not tested under real concurrency yet.
+- Files: `CONTEXT.md`.
 
 ### 2026-11-03 23:38 IST — Anurag + Codex
 - Corrected `gen_mandate_key.py` to specify one shared key per database and removed the two stray
