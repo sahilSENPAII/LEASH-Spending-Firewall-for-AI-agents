@@ -49,6 +49,11 @@ Values go in the repo-root `.env` (git-ignored); names are listed in `.env.examp
    ```bash
    uv run python -m app.mcp_server
    ```
+8. Check the setup at any time (read-only, never writes). It prints OK/FAIL for the database,
+   the signing key (with a shareable fingerprint), the migration, `m_demo` and the audit chain:
+   ```bash
+   uv run python -m scripts.check_setup
+   ```
 
 ## Run tests
 Python 3.12 and [uv](https://docs.astral.sh/uv/), from `backend/`:
