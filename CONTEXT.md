@@ -25,7 +25,7 @@ checked against a user-signed mandate → ALLOW / STEP-UP / BLOCK, and logged in
 Stack: Python 3.12, FastAPI, Postgres (Neon), MCP Python SDK 1.x, PayPal REST v2 sandbox, Groq via
 LiteLLM, XGBoost + SHAP, LangGraph + Playwright demo agent, React + AG Grid. Zero spend (see D6).
 
-Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1–D12),
+Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1–D13),
 `docs/LEARN.md` (concepts), `spikes/README.md` (how to run the M0 tests).
 
 ## Milestones
@@ -46,6 +46,8 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 - The policy evaluator is integrated into `backend/app/orchestrator.py`, which persists payment and audit state in Postgres. The main orchestrator still uses hardcoded `DEMO_MANDATE` and an unlocked `_usage()` query. `check_and_reserve` / `release_budget` are on `main` (`f3de389`, merged at `f50199f`) but are not wired into the payment flow yet.
 - Mandates part 1: `app/canonical.py` (canonical JSON) and `app/mandates.py` (`MandateTerms` including signed `intent`, `MandateRecord` with `budget_used`/`payment_count`, Ed25519 sign/verify, and fail-closed `verify_mandate`). The 202 backend tests pass.
 - Mandates part 2 is implemented and pushed on `anurag` (`f3de389`, merged into `main` at `f50199f`): `mandates` and `budget_holds` tables, mandate CRUD, atomic budget holds, and velocity counting. The 235-test suite passes.
+- Audit chain is implemented in `backend/app/audit.py`: `append_audit` links entries with SHA-256 over the previous hash and canonical JSON under a Postgres advisory lock; `verify_chain` returns `ChainCheck`, and `GET /audit/verify` is available. Mandate create/revoke write audit events, and mandate, hold, and audit timestamps are stored in UTC. D13 records the chain rules and tail-truncation limit. The 271-test suite passes.
+- Before any payment on Neon after migration `0002` and the `m_demo` seed, Sahil must route every audit write through `append_audit`. `backend/app/orchestrator.py` still writes `AuditEvent(...)` directly; those unhashed rows break `/audit/verify` and make the next append fail closed.
 - Task split agreed (`task-split.md`): Sahil = money path + Groq judge; Anurag = trust path + XGBoost/SHAP + LangGraph agent.
 - Workflow docs are split: human handoff rules live in `CONTEXT.md`; agent-specific rules live in `AGENTS.md`. Both are maintained directly on `main`; code goes on task branches and through PRs.
 - The policy evaluator's 109 unit tests and exact Decimal budget check are now merged to `main`.
@@ -71,7 +73,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Claude: audit chain on `anurag` — `app/audit.py` `append_audit` (Postgres advisory lock) and `verify_chain` -> `ChainCheck`; write `mandate.created` / `mandate.revoked`.
+- Anurag + Claude: none — trust-path backend for sync 1 is done; waiting on Sahil's orchestrator switch. Next: LangGraph attack agent.
 - Sahil + Claude: paused (back later on Nov 2). Next: Groq intent judge (`app/judge.py`), HTTP MCP
   transport + `list_mandates` / `get_payment_status`, Render deploy ($50 credits claimed, no card).
 
@@ -85,9 +87,10 @@ Ask Sahil for the shared sandbox values.
 - [x] Anurag: add `cryptography` to `backend/pyproject.toml` and `uv.lock` for mandate signing.
 - [x] Sahil: merchant/category config (server-side, never from the agent; `MERCHANT_CATEGORIES` in `backend/app/orchestrator.py`).
 - [x] Anurag: mandates part 2 — database model/migration, create/revoke/list, and reserve/release budget (pushed to `anurag` as `f3de389`; merged into `main`).
-- [ ] Anurag: hash-chained audit log + `/audit/verify` (branch `anurag`).
+- [x] Anurag: hash-chained audit log + `/audit/verify` (merged into `main` as `88bf54c`).
 - [ ] Both: agree on one shared `MANDATE_SIGNING_KEY` for the Neon database and choose who runs migration `0002`.
-- [ ] Sahil: after key agreement, run migration `0002` and seed `m_demo` on Neon; switch the orchestrator to `check_and_reserve` / `release_budget` (and `append_audit` once the audit chain lands) per `docs/CONTRACTS.md` section 5.3, then remove `DEMO_MANDATE` and `_usage()`. Migration `0002` deletes every `audit_events` row; it leaves `payments` untouched. Do not run it until the key and runner are agreed.
+- [ ] Sahil: after key agreement, run migration `0002` and seed `m_demo` on Neon. Migration `0002` deletes every `audit_events` row; it leaves `payments` untouched. Do not run it until the key and runner are agreed.
+- [ ] Sahil (before any payment on Neon after the seed): switch the orchestrator to `check_and_reserve` / `release_budget` / `append_audit` per `docs/CONTRACTS.md` section 5.3; replace every direct `AuditEvent(...)` write (`payment.decided`, `_move`, `_fail`) with `append_audit(session, event_type=..., payment_id=..., payload=..., now=now)`; drop `DEMO_MANDATE` and `_usage()`.
 - [ ] Sahil (minor): fix the three `0001` nullable mismatches: `payments.created_at`, `payments.updated_at`, and `audit_events.created_at`.
 - [x] Sahil: update the `docs/CONTRACTS.md` app paths.
 - [x] Sahil: rename `payment.error` to `payment.failed`.
@@ -96,8 +99,15 @@ Ask Sahil for the shared sandbox values.
 - [x] Sahil: MCP `request_payment` + orchestrator (merged into `main` from `sahil`).
 - [ ] Sahil: MCP `list_mandates` / `get_payment_status`.
 - [ ] Sahil: Render deploy.
+- [ ] Anurag: LangGraph attack agent (Nov 4–6).
 
 ## Log (newest first)
+
+### 2026-11-03 23:08 IST — Anurag + Claude
+- Merged audit chain commit `88bf54c` into `main`: `append_audit`, `verify_chain`, `GET /audit/verify`, and `mandate.created` / `mandate.revoked` events. D13 documents fail-closed handling of unhashed rows and the tail-truncation limit.
+- Normalized mandate, hold, and audit timestamps to UTC before storage; naive timestamps are rejected where audit or mandate state is written. All 271 tests pass and Ruff is clean.
+- The Neon migration and seed have not been run. Sahil's orchestrator still writes audit rows directly; switch all writes to `append_audit` before any payment on Neon after the seed.
+- Files: `backend/app/{audit,main,mandates}.py`, `backend/tests/test_{audit,mandates}.py`, `docs/DECISIONS.md` (D13), `docs/LEARN.md`, `CONTEXT.md`.
 
 ### 2026-11-03 22:45 IST — Anurag + Claude
 - Mandates part 2 (`f3de389`) is merged into `main` (`f50199f`); 235 tests pass, Ruff clean.
