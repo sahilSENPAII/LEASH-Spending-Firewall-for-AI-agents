@@ -10,11 +10,11 @@ from decimal import Decimal
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app import mandates
-from app.audit import verify_chain
+from app.audit import append_audit, verify_chain
 from app.config import Settings
 from app.db import to_async_url
 from app.mandates import (
@@ -38,7 +38,7 @@ from app.mandates import (
 )
 from app.models import BudgetHold, MandateRow, Payment
 from app.policy import Mandate, PaymentRequest, PolicyOutcome
-from app.state import PaymentStatus
+from app.state import PaymentStatus, transition
 
 NOW = datetime(2026, 11, 2, 12, 0, tzinfo=UTC)
 KEY = Ed25519PrivateKey.generate()
@@ -659,14 +659,40 @@ async def test_concurrent_reserves_cannot_overspend_on_postgres():
         assert (record.budget_used, record.payment_count) == (Decimal("6.00"), 1)
         assert len(holds) == 1
     finally:
+        done = datetime.now(UTC)
         async with sessions() as s:
+            # Mandate row locks (release, revoke) before the audit chain lock (CONTRACTS section 3).
+            held = set()
             for pid in payment_ids:
+                if await s.get(BudgetHold, pid) is not None:
+                    held.add(pid)
                 # Without the lock both reserves pass and usage ends lower than the holds.
                 with suppress(ValueError):
-                    await release_budget(s, payment_id=pid, now=datetime.now(UTC))
+                    await release_budget(s, payment_id=pid, now=done)
             if created:
-                await revoke_mandate(s, mandate_id, datetime.now(UTC))
+                await revoke_mandate(s, mandate_id, done)
+            for pid in payment_ids:
+                payment = await s.get(Payment, pid)
+                target = S.FAILED if pid in held else S.BLOCKED
+                payment.status = transition(S(payment.status), target)
+                await append_audit(
+                    s,
+                    event_type=f"payment.{target.lower()}",
+                    payment_id=pid,
+                    payload={"status": target.value},
+                    now=done,
+                )
             await s.commit()
             chain = await verify_chain(s)
+            statuses = sorted(
+                await s.scalars(select(Payment.status).where(Payment.mandate_id == mandate_id))
+            )
+            open_holds = await s.scalar(
+                select(func.count()).where(
+                    BudgetHold.mandate_id == mandate_id, BudgetHold.released_at.is_(None)
+                )
+            )
         await engine.dispose()
     assert chain.ok
+    assert statuses == [S.BLOCKED, S.FAILED]
+    assert open_holds == 0
