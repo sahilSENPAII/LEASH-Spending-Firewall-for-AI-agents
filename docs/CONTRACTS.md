@@ -156,7 +156,6 @@ class ChainCheck:
 - `append_audit` runs in the same transaction as the state change it records. If it fails, the
   transaction fails, so there is no decision without an audit entry.
 - `GET /audit/verify` returns `ChainCheck` as JSON (route in Sahil's API, body from `verify_chain`).
-
 - **Every** `audit_events` write must go through `append_audit`. A row inserted directly has no
   hash: `verify_chain` reports it as the first bad entry and `append_audit` refuses to extend it
   (`ValueError`), so the chain is never silently skipped (D13).
@@ -166,7 +165,6 @@ class ChainCheck:
   `release_budget` / `revoke_mandate` (mandate row lock) **before** `append_audit` (chain lock),
   never the other way round.
 - Also exported: `entry_hash(...)` and `GENESIS_HASH` (`"0" * 64`), for tests and the console.
-
 - Event types Anurag's side writes: `mandate.created`, `mandate.revoked`. The orchestrator writes
   payment events: `payment.decided`, `payment.blocked`, `payment.authorized`, `payment.captured`,
   `payment.voided`, `payment.failed`, `approval.requested`, `approval.approved`, `approval.denied`,
