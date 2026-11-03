@@ -84,7 +84,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Codex: pre-agent fixes are complete; waiting for the user's LangGraph materials and steps before implementation.
+- Anurag + Codex: read-only setup checker on `anurag`; run local tests and the Neon check, then wait for the user's LangGraph materials.
 - Sahil + Claude: next is `request_payment(mandate_id, merchant_id, items=[{sku, quantity}])` with a
   shared server-side catalog and the demo stores (SoundHub :8101, MegaDeals :8102); then HTTP MCP
   transport + `list_mandates` / `get_payment_status`, Render deploy, Groq intent judge (`app/judge.py`).
@@ -127,6 +127,10 @@ Ask Sahil for the shared sandbox values.
       setting so switching to HTTP is one line.
 
 ## Log (newest first)
+
+### 2026-11-03 23:52 IST — Anurag + Codex
+- Claimed the read-only setup checker: verify database reachability, key fingerprint, migration, `m_demo` signature, and audit chain. No database writes.
+- Files: `CONTEXT.md`.
 
 ### 2026-11-03 23:50 IST — Sahil + Claude
 - Orchestrator switch merged to `main` (`31dcdfb`, from `sahil` `be6acf7`): payment row flushed first,
