@@ -43,9 +43,9 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 
 ## Current state
 - M0 complete. Repo layout exists. `backend/app/policy.py` now contains a standalone deterministic evaluator; `agent/`, `stores/`, `frontend/`, and `ml/` remain placeholders.
-- The policy evaluator is integrated into `backend/app/orchestrator.py`, which persists payment and audit state in Postgres. The main orchestrator still uses hardcoded `DEMO_MANDATE` and an unlocked `_usage()` query. `check_and_reserve` / `release_budget` are ready on `anurag` at `f3de389`, but are not on `main` or wired into the payment flow yet.
+- The policy evaluator is integrated into `backend/app/orchestrator.py`, which persists payment and audit state in Postgres. The main orchestrator still uses hardcoded `DEMO_MANDATE` and an unlocked `_usage()` query. `check_and_reserve` / `release_budget` are on `main` (`f3de389`, merged at `f50199f`) but are not wired into the payment flow yet.
 - Mandates part 1: `app/canonical.py` (canonical JSON) and `app/mandates.py` (`MandateTerms` including signed `intent`, `MandateRecord` with `budget_used`/`payment_count`, Ed25519 sign/verify, and fail-closed `verify_mandate`). The 202 backend tests pass.
-- Mandates part 2 is implemented and pushed on `anurag` (`f3de389`, merge pending): `mandates` and `budget_holds` tables, mandate CRUD, atomic budget holds, and velocity counting. The 235-test suite passes.
+- Mandates part 2 is implemented and pushed on `anurag` (`f3de389`, merged into `main` at `f50199f`): `mandates` and `budget_holds` tables, mandate CRUD, atomic budget holds, and velocity counting. The 235-test suite passes.
 - Task split agreed (`task-split.md`): Sahil = money path + Groq judge; Anurag = trust path + XGBoost/SHAP + LangGraph agent.
 - Workflow docs are split: human handoff rules live in `CONTEXT.md`; agent-specific rules live in `AGENTS.md`. Both are maintained directly on `main`; code goes on task branches and through PRs.
 - The policy evaluator's 109 unit tests and exact Decimal budget check are now merged to `main`.
@@ -84,10 +84,10 @@ Ask Sahil for the shared sandbox values.
 - [x] Anurag: move the policy engine to `backend/app/policy.py`; remove root `pytest.ini` and `backend/requirements-dev.txt`; tests and Ruff pass from `backend/`.
 - [x] Anurag: add `cryptography` to `backend/pyproject.toml` and `uv.lock` for mandate signing.
 - [x] Sahil: merchant/category config (server-side, never from the agent; `MERCHANT_CATEGORIES` in `backend/app/orchestrator.py`).
-- [x] Anurag: mandates part 2 — database model/migration, create/revoke/list, and reserve/release budget (pushed to `anurag` as `f3de389`; merge to `main` pending).
+- [x] Anurag: mandates part 2 — database model/migration, create/revoke/list, and reserve/release budget (pushed to `anurag` as `f3de389`; merged into `main`).
 - [ ] Anurag: hash-chained audit log + `/audit/verify` (branch `anurag`).
 - [ ] Both: agree on one shared `MANDATE_SIGNING_KEY` for the Neon database and choose who runs migration `0002`.
-- [ ] Sahil: after the merge and key agreement, run migration `0002` and seed `m_demo` on Neon; switch the orchestrator to `check_and_reserve` / `release_budget` per `docs/CONTRACTS.md` section 5.3, then remove `DEMO_MANDATE` and `_usage()`. Migration `0002` deletes every `audit_events` row; it leaves `payments` untouched. Do not run it until the key and runner are agreed.
+- [ ] Sahil: after key agreement, run migration `0002` and seed `m_demo` on Neon; switch the orchestrator to `check_and_reserve` / `release_budget` (and `append_audit` once the audit chain lands) per `docs/CONTRACTS.md` section 5.3, then remove `DEMO_MANDATE` and `_usage()`. Migration `0002` deletes every `audit_events` row; it leaves `payments` untouched. Do not run it until the key and runner are agreed.
 - [ ] Sahil (minor): fix the three `0001` nullable mismatches: `payments.created_at`, `payments.updated_at`, and `audit_events.created_at`.
 - [x] Sahil: update the `docs/CONTRACTS.md` app paths.
 - [x] Sahil: rename `payment.error` to `payment.failed`.
@@ -98,6 +98,11 @@ Ask Sahil for the shared sandbox values.
 - [ ] Sahil: Render deploy.
 
 ## Log (newest first)
+
+### 2026-11-03 22:45 IST — Anurag + Claude
+- Mandates part 2 (`f3de389`) is merged into `main` (`f50199f`); 235 tests pass, Ruff clean.
+- Next: agree on the shared `MANDATE_SIGNING_KEY` and who runs migration `0002` on Neon with Sahil, then build the audit chain.
+- Files: `CONTEXT.md`.
 
 ### 2026-11-03 22:36 IST — Anurag + Claude
 - Implemented mandates part 2 in one commit, `f3de389`, and pushed it to `anurag`; it is not merged into `main` yet. Added `MandateRow` / `BudgetHold`, migration `0002`, create/revoke/get/list, `check_and_reserve`, `release_budget`, and velocity settings.
