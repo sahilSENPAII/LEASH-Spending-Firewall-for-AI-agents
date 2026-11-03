@@ -43,14 +43,15 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 
 ## Current state
 - M0 complete. Repo layout exists. `backend/app/policy.py` now contains a standalone deterministic evaluator; `agent/`, `stores/`, `frontend/`, and `ml/` remain placeholders.
-- The policy evaluator is integrated into `backend/app/orchestrator.py`, which persists payment and audit state in Postgres. The current flow still uses a server-side demo mandate; Ed25519 mandate verification exists in `backend/app/mandates.py` but is not wired into the payment flow, and atomic budget holds remain pending.
+- The policy evaluator is integrated into `backend/app/orchestrator.py`, which persists payment and audit state in Postgres. The main orchestrator still uses hardcoded `DEMO_MANDATE` and an unlocked `_usage()` query. `check_and_reserve` / `release_budget` are ready on `anurag` at `f3de389`, but are not on `main` or wired into the payment flow yet.
 - Mandates part 1: `app/canonical.py` (canonical JSON) and `app/mandates.py` (`MandateTerms` including signed `intent`, `MandateRecord` with `budget_used`/`payment_count`, Ed25519 sign/verify, and fail-closed `verify_mandate`). The 202 backend tests pass.
+- Mandates part 2 is implemented and pushed on `anurag` (`f3de389`, merge pending): `mandates` and `budget_holds` tables, mandate CRUD, atomic budget holds, and velocity counting. The 235-test suite passes.
 - Task split agreed (`task-split.md`): Sahil = money path + Groq judge; Anurag = trust path + XGBoost/SHAP + LangGraph agent.
 - Workflow docs are split: human handoff rules live in `CONTEXT.md`; agent-specific rules live in `AGENTS.md`. Both are maintained directly on `main`; code goes on task branches and through PRs.
 - The policy evaluator's 109 unit tests and exact Decimal budget check are now merged to `main`.
 - `backend/tests/test_policy.py` passes Sahil's Ruff 0.17.3 CI rules; the lint fix is merged to `main`.
 - README test instructions and D12's exact-budget decision are now merged into `main` from `anurag`.
-- Contracts agreed (Nov 2): Sahil said yes to all 4 open questions and the `check_and_reserve` design. Section 5 and `payment.blocked` are in `docs/CONTRACTS.md`; path updates are pending.
+- Contracts agreed (Nov 2): Sahil said yes to all 4 open questions and the `check_and_reserve` design. Section 5 and `payment.blocked` are in `docs/CONTRACTS.md`; Sahil updated the app paths and renamed `payment.error` to `payment.failed`. The `void_failed` audit payload remains pending.
 - Sahil: real Claude Desktop -> orchestrator -> PayPal sandbox $1 payment to SoundHub captured; MegaDeals and $250 blocked by `policy.py` (149 tests pass).
 - Policy engine moved to `backend/app/policy.py` (import `app.policy`). Root `pytest.ini` and `backend/requirements-dev.txt` removed. Tests and lint only via `uv run pytest` / `uv run ruff check app tests scripts` from `backend/` (149 pass).
 - Sahil agreed: migration `0002` includes a clearly named one-off step that deletes all `audit_events` rows (test data only); `payments` is untouched.
@@ -65,11 +66,12 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_BASE_URL`, `SANDBOX_BUYER_EMAIL`,
 `MERCHANT_SOUNDHUB_EMAIL`, `MERCHANT_MEGADEALS_EMAIL`, `PLATFORM_MERCHANT_EMAIL`, `GROQ_API_KEY`,
 `PAYPAL_VAULT_ID` (saved demo-buyer wallet token), `DATABASE_URL`, `DATABASE_URL_POOLED` (Neon),
-`MANDATE_SIGNING_KEY` (base64 Ed25519 private key; generate with `uv run python -m scripts.gen_mandate_key` from `backend/`; each person and Render needs its own key).
+`MANDATE_SIGNING_KEY` (base64 Ed25519 private key; generate once per database with `uv run python -m scripts.gen_mandate_key` from `backend/`, then provision the same key securely for Sahil, Anurag, and Render; a different key makes signature verification fail and blocks payments),
+`VELOCITY_MAX_PAYMENTS` (default 3), `VELOCITY_WINDOW_SECONDS` (default 600).
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Claude: mandates part 2 on `anurag` — mandates + `budget_holds` models, migration `0002` (including the agreed one-off `audit_events` wipe), create/revoke/list, `check_and_reserve` / `release_budget`, and velocity settings.
+- Anurag + Claude: audit chain on `anurag` — `app/audit.py` `append_audit` (Postgres advisory lock) and `verify_chain` -> `ChainCheck`; write `mandate.created` / `mandate.revoked`.
 - Sahil + Claude: paused (back later on Nov 2). Next: Groq intent judge (`app/judge.py`), HTTP MCP
   transport + `list_mandates` / `get_payment_status`, Render deploy ($50 credits claimed, no card).
 
@@ -82,11 +84,13 @@ Ask Sahil for the shared sandbox values.
 - [x] Anurag: move the policy engine to `backend/app/policy.py`; remove root `pytest.ini` and `backend/requirements-dev.txt`; tests and Ruff pass from `backend/`.
 - [x] Anurag: add `cryptography` to `backend/pyproject.toml` and `uv.lock` for mandate signing.
 - [x] Sahil: merchant/category config (server-side, never from the agent; `MERCHANT_CATEGORIES` in `backend/app/orchestrator.py`).
-- [ ] Anurag: mandates part 2 — database model/migration, create/revoke/list, and reserve/release budget (branch `anurag`).
+- [x] Anurag: mandates part 2 — database model/migration, create/revoke/list, and reserve/release budget (pushed to `anurag` as `f3de389`; merge to `main` pending).
 - [ ] Anurag: hash-chained audit log + `/audit/verify` (branch `anurag`).
-- [ ] Sahil: orchestrator calls `check_and_reserve` / `release_budget` / `append_audit` per `docs/CONTRACTS.md`.
-- [ ] Sahil: update section 5 paths in `docs/CONTRACTS.md` to `backend/app/policy.py`, `app/mandates.py`, `app/audit.py`.
-- [ ] Sahil: rename `payment.error` to `payment.failed` after the policy move is on `main`.
+- [ ] Both: agree on one shared `MANDATE_SIGNING_KEY` for the Neon database and choose who runs migration `0002`.
+- [ ] Sahil: after the merge and key agreement, run migration `0002` and seed `m_demo` on Neon; switch the orchestrator to `check_and_reserve` / `release_budget` per `docs/CONTRACTS.md` section 5.3, then remove `DEMO_MANDATE` and `_usage()`. Migration `0002` deletes every `audit_events` row; it leaves `payments` untouched. Do not run it until the key and runner are agreed.
+- [ ] Sahil (minor): fix the three `0001` nullable mismatches: `payments.created_at`, `payments.updated_at`, and `audit_events.created_at`.
+- [x] Sahil: update the `docs/CONTRACTS.md` app paths.
+- [x] Sahil: rename `payment.error` to `payment.failed`.
 - [x] M1 backend skeleton: FastAPI app + settings, Postgres models + Alembic, PayPal client, CI
       (merged into `main` from `sahil`).
 - [x] Sahil: MCP `request_payment` + orchestrator (merged into `main` from `sahil`).
@@ -94,6 +98,14 @@ Ask Sahil for the shared sandbox values.
 - [ ] Sahil: Render deploy.
 
 ## Log (newest first)
+
+### 2026-11-03 22:36 IST — Anurag + Claude
+- Implemented mandates part 2 in one commit, `f3de389`, and pushed it to `anurag`; it is not merged into `main` yet. Added `MandateRow` / `BudgetHold`, migration `0002`, create/revoke/get/list, `check_and_reserve`, `release_budget`, and velocity settings.
+- Migration `0002` deletes all rows in `audit_events` as the agreed one-off cleanup; it does not alter `payments`. Scratch SQLite upgrade -> downgrade -> upgrade passed, with the audit row cleared and payment preserved. The migration has not been run on Neon.
+- The 235 tests pass and Ruff is clean. `alembic check` reports only the three pre-existing nullable mismatches in migration `0001` (`payments.created_at`, `payments.updated_at`, `audit_events.created_at`).
+- Added the signed `m_demo` seed script and mandates notes to `docs/LEARN.md`.
+- A single shared `MANDATE_SIGNING_KEY` is required for the shared database; agree on the key and who runs `0002` before migration or seeding.
+- Files: `.env.example`, `backend/app/{config,mandates,models}.py`, `backend/migrations/versions/0002_mandates_and_budget_holds.py`, `backend/scripts/seed_demo_mandate.py`, `backend/tests/test_mandates.py`, `docs/LEARN.md`, `CONTEXT.md`.
 
 ### 2026-11-02 05:30 IST — Sahil + Claude
 - Merged `sahil` into `main` (`1ab1401`): smoke script run note fixed (`uv run python -m scripts.smoke_paypal`);
