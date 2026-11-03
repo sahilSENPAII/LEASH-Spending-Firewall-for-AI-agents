@@ -47,7 +47,8 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 - Mandates part 1: `app/canonical.py` (canonical JSON) and `app/mandates.py` (`MandateTerms` including signed `intent`, `MandateRecord` with `budget_used`/`payment_count`, Ed25519 sign/verify, and fail-closed `verify_mandate`). The 202 backend tests pass.
 - Mandates part 2 is implemented and pushed on `anurag` (`f3de389`, merged into `main` at `f50199f`): `mandates` and `budget_holds` tables, mandate CRUD, atomic budget holds, and velocity counting. The 235-test suite passes.
 - Audit chain is implemented in `backend/app/audit.py`: `append_audit` links entries with SHA-256 over the previous hash and canonical JSON under a Postgres advisory lock; `verify_chain` returns `ChainCheck`, and `GET /audit/verify` is available. Mandate create/revoke write audit events, and mandate, hold, and audit timestamps are stored in UTC. D13 records the chain rules and tail-truncation limit. The 271-test suite passes.
-- Before any payment on Neon after migration `0002` and the `m_demo` seed, Sahil must route every audit write through `append_audit`. `backend/app/orchestrator.py` still writes `AuditEvent(...)` directly; those unhashed rows break `/audit/verify` and make the next append fail closed.
+- Neon: migration `0002` is applied (head) and `m_demo` is seeded (Sahil, Nov 3). The shared `MANDATE_SIGNING_KEY` was shared by DM.
+- No payments on Neon until the orchestrator switch is merged: `backend/app/orchestrator.py` on `main` still writes `AuditEvent(...)` directly; those unhashed rows break `/audit/verify` and make the next append fail closed.
 - Task split agreed (`task-split.md`): Sahil = money path + Groq judge; Anurag = trust path + XGBoost/SHAP + LangGraph agent.
 - Workflow docs are split: human handoff rules live in `CONTEXT.md`; agent-specific rules live in `AGENTS.md`. Both are maintained directly on `main`; code goes on task branches and through PRs.
 - The policy evaluator's 109 unit tests and exact Decimal budget check are now merged to `main`.
@@ -81,8 +82,9 @@ Ask Sahil for the shared sandbox values.
 
 ## In progress
 - Anurag + Codex: LangGraph attack agent (Nov 4–6), waiting on Sahil's answers about the demo stores, MCP transport, and `request_payment` arguments.
-- Sahil + Claude: paused (back later on Nov 2). Next: Groq intent judge (`app/judge.py`), HTTP MCP
-  transport + `list_mandates` / `get_payment_status`, Render deploy ($50 credits claimed, no card).
+- Sahil + Claude: orchestrator switch to `check_and_reserve` / `release_budget` / `append_audit`
+  (branch `sahil`). Then: HTTP MCP transport + `list_mandates` / `get_payment_status`, Render deploy
+  ($50 credits claimed, no card), Groq intent judge (`app/judge.py`).
 
 ## Next up
 - [x] Sahil: Python 3.12 via uv; Neon project `leash` (AWS us-east-1), `DATABASE_URL` in `.env`.
@@ -95,8 +97,8 @@ Ask Sahil for the shared sandbox values.
 - [x] Sahil: merchant/category config (server-side, never from the agent; `MERCHANT_CATEGORIES` in `backend/app/orchestrator.py`).
 - [x] Anurag: mandates part 2 — database model/migration, create/revoke/list, and reserve/release budget (pushed to `anurag` as `f3de389`; merged into `main`).
 - [x] Anurag: hash-chained audit log + `/audit/verify` (merged into `main` as `88bf54c`).
-- [ ] Both: agree on one shared `MANDATE_SIGNING_KEY` for the Neon database and choose who runs migration `0002`.
-- [ ] Sahil: after key agreement, run migration `0002` and seed `m_demo` on Neon. Migration `0002` deletes every `audit_events` row; it leaves `payments` untouched. Do not run it until the key and runner are agreed.
+- [x] Both: agree on one shared `MANDATE_SIGNING_KEY` for the Neon database (shared by DM) and choose who runs migration `0002` (Sahil).
+- [x] Sahil: run migration `0002` and seed `m_demo` on Neon (Nov 3).
 - [ ] Sahil (before any payment on Neon after the seed): switch the orchestrator to `check_and_reserve` / `release_budget` / `append_audit` per `docs/CONTRACTS.md` section 5.3; replace every direct `AuditEvent(...)` write (`payment.decided`, `_move`, `_fail`) with `append_audit(session, event_type=..., payment_id=..., payload=..., now=now)`; drop `DEMO_MANDATE` and `_usage()`.
 - [ ] Sahil (minor): fix the three `0001` nullable mismatches: `payments.created_at`, `payments.updated_at`, and `audit_events.created_at`.
 - [x] Sahil: update the `docs/CONTRACTS.md` app paths.
@@ -109,6 +111,14 @@ Ask Sahil for the shared sandbox values.
 - [ ] Anurag: LangGraph attack agent (Nov 4–6).
 
 ## Log (newest first)
+
+### 2026-11-03 23:30 IST — Sahil + Claude
+- Ran `alembic upgrade head` (`0002`) and `scripts.seed_demo_mandate` on Neon. Checked read-only:
+  `alembic current` is `0002 (head)`, `mandates` has `m_demo`, `audit_events` has one hashed
+  `mandate.created` row.
+- The shared `MANDATE_SIGNING_KEY` is in Sahil's `.env` (shared by DM).
+- Claimed the orchestrator switch on `sahil`. No payments on Neon until it is merged.
+- Files: `CONTEXT.md`.
 
 ### 2026-11-03 23:27 IST — Anurag + Codex
 - Trust-path polish: a missing or malformed `MANDATE_SIGNING_KEY` is logged and blocks with
