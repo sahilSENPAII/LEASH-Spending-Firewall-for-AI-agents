@@ -47,7 +47,10 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 - Mandates part 1: `app/canonical.py` (canonical JSON) and `app/mandates.py` (`MandateTerms` including signed `intent`, `MandateRecord` with `budget_used`/`payment_count`, Ed25519 sign/verify, and fail-closed `verify_mandate`). The 202 backend tests pass.
 - Mandates part 2 is implemented and pushed on `anurag` (`f3de389`, merged into `main` at `f50199f`): `mandates` and `budget_holds` tables, mandate CRUD, atomic budget holds, and velocity counting. The 235-test suite passes.
 - Audit chain is implemented in `backend/app/audit.py`: `append_audit` links entries with SHA-256 over the previous hash and canonical JSON under a Postgres advisory lock; `verify_chain` returns `ChainCheck`, and `GET /audit/verify` is available. Mandate create/revoke write audit events, and mandate, hold, and audit timestamps are stored in UTC. D13 records the chain rules and tail-truncation limit. The 271-test suite passes.
-- Neon: migration `0002` is applied (head) and `m_demo` is seeded (Sahil, Nov 3). The shared `MANDATE_SIGNING_KEY` was shared by DM.
+- Neon migration `0002` is at head and signed `m_demo` was seeded by Sahil on Nov 3. Do not rerun
+  the migration or seed on Neon.
+- One shared `MANDATE_SIGNING_KEY` is in use for Neon and was shared by DM. Keep the value only in
+  ignored local `.env` files; provision it securely to Render.
 - No payments on Neon until the orchestrator switch is merged: `backend/app/orchestrator.py` on `main` still writes `AuditEvent(...)` directly; those unhashed rows break `/audit/verify` and make the next append fail closed.
 - Task split agreed (`task-split.md`): Sahil = money path + Groq judge; Anurag = trust path + XGBoost/SHAP + LangGraph agent.
 - Workflow docs are split: human handoff rules live in `CONTEXT.md`; agent-specific rules live in `AGENTS.md`. Both are maintained directly on `main`; code goes on task branches and through PRs.
@@ -70,7 +73,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
   failure and blocks with `mandate_signature_invalid`. Key parsing is cached; shared UTC helper
   `app/times.py` and shared test setup `tests/conftest.py` replace duplicates. `docs/CONTRACTS.md`
   documents errors, one key per database, audit writes through `append_audit`, and lock order. README
-  has database setup steps. 274 tests pass.
+  has database setup steps. `gen_mandate_key.py` now says one key per database. 274 tests pass.
 
 ## Env vars (names only — values live in each person's local `.env`)
 `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_BASE_URL`, `SANDBOX_BUYER_EMAIL`,
@@ -81,7 +84,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Codex: pre-agent cleanup (shared signing-key guidance and contract spacing) on `anurag`; then LangGraph attack agent.
+- Anurag + Codex: pre-agent fixes are complete; waiting for the user's LangGraph materials and steps before implementation.
 - Sahil + Claude: orchestrator switch to `check_and_reserve` / `release_budget` / `append_audit`
   (branch `sahil`). Then: HTTP MCP transport + `list_mandates` / `get_payment_status`, Render deploy
   ($50 credits claimed, no card), Groq intent judge (`app/judge.py`).
@@ -99,8 +102,17 @@ Ask Sahil for the shared sandbox values.
 - [x] Anurag: hash-chained audit log + `/audit/verify` (merged into `main` as `88bf54c`).
 - [x] Both: agree on one shared `MANDATE_SIGNING_KEY` for the Neon database (shared by DM) and choose who runs migration `0002` (Sahil).
 - [x] Sahil: run migration `0002` and seed `m_demo` on Neon (Nov 3).
-- [ ] Sahil (before any payment on Neon after the seed): switch the orchestrator to `check_and_reserve` / `release_budget` / `append_audit` per `docs/CONTRACTS.md` section 5.3; replace every direct `AuditEvent(...)` write (`payment.decided`, `_move`, `_fail`) with `append_audit(session, event_type=..., payment_id=..., payload=..., now=now)`; drop `DEMO_MANDATE` and `_usage()`.
-- [ ] Sahil (minor): fix the three `0001` nullable mismatches: `payments.created_at`, `payments.updated_at`, and `audit_events.created_at`.
+- [ ] Sahil (Nov 4, 2 PM IST): orchestrator switch to `check_and_reserve` / `release_budget` /
+      `append_audit`; flush the payment row first, keep the mandate-before-audit lock order, use UTC
+      `now`, avoid floats, drop `DEMO_MANDATE` and `_usage()`, fix the three `0001` nullable
+      mismatches, and update `request_payment(mandate_id, merchant_id, items=[{sku, quantity}])`.
+      Prices come from the shared catalog; the agent sends no price or amount. Update
+      `docs/CONTRACTS.md` section 5.5.
+- [ ] Sahil (Nov 4 evening): demo stores at `http://localhost:8101` (SoundHub) and
+      `http://localhost:8102` (MegaDeals); product list plus one page per product; SKU, name and price
+      as text and in `data-sku` / `data-price`; hidden injection on a MegaDeals product page; one shared
+      catalog file for both stores and Leash's trusted prices.
+- [ ] Sahil (~Nov 5): Render deploy with HTTP MCP at `https://<service>.onrender.com/mcp`.
 - [x] Sahil: update the `docs/CONTRACTS.md` app paths.
 - [x] Sahil: rename `payment.error` to `payment.failed`.
 - [x] M1 backend skeleton: FastAPI app + settings, Postgres models + Alembic, PayPal client, CI
@@ -108,15 +120,26 @@ Ask Sahil for the shared sandbox values.
 - [x] Sahil: MCP `request_payment` + orchestrator (merged into `main` from `sahil`).
 - [ ] Sahil: MCP `list_mandates` / `get_payment_status`.
 - [ ] Sahil: Render deploy.
-- [ ] Anurag: LangGraph attack agent (Nov 4–6).
+- [ ] Anurag: LangGraph attack agent (Nov 4–6), after the user provides materials and steps. Start
+      with stdio MCP via the LangGraph MCP client adapter; keep the Leash transport in one config
+      setting so switching to HTTP is one line.
 
 ## Log (newest first)
+
+### 2026-11-03 23:38 IST — Anurag + Codex
+- Corrected `gen_mandate_key.py` to specify one shared key per database and removed the two stray
+  blank lines in section 3 of `docs/CONTRACTS.md`. No migration or seed was run; Sahil already did
+  both on Neon on Nov 3.
+- Recorded Sahil's Nov 3 answers: shared key and Neon setup are complete; orchestrator switch due
+  Nov 4 at 2 PM IST, stores at `:8101` / `:8102` by Nov 4 evening, HTTP MCP on Render around Nov 5,
+  and `request_payment` uses SKU and quantity items without agent-supplied prices.
+- No LangGraph implementation started. Waiting for you to provide the materials and steps.
+  274 tests pass; Ruff is clean.
+- Files: `backend/scripts/gen_mandate_key.py`, `docs/CONTRACTS.md`, `CONTEXT.md`.
 
 ### 2026-11-03 23:35 IST — Anurag + Codex
 - Claimed the pre-agent cleanup: correct the signing-key guidance and remove two stray contract blank lines. Code/docs changes will be on `anurag`; handoff updates stay on `main`.
 - Files: `CONTEXT.md`.
-
-
 
 ### 2026-11-03 23:30 IST — Sahil + Claude
 - Ran `alembic upgrade head` (`0002`) and `scripts.seed_demo_mandate` on Neon. Checked read-only:
