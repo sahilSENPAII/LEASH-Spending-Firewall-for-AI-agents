@@ -276,3 +276,50 @@ both sides can merge in any order.
 5. **What does the end-to-end test prove?** The agent's request goes through the real MCP server,
    orchestrator, budget hold and policy; the attack is BLOCKED, the normal purchase CAPTURED, and the
    audit chain still verifies.
+
+---
+
+## Anomaly model (Nov 4) — Anurag
+
+### What was built
+`backend/app/anomaly.py`: `score_anomaly(features)` gives a score from 0 to 1 and up to 3 reasons, using
+an XGBoost model trained on synthetic payments (`backend/scripts/train_anomaly.py`).
+`build_features` turns a real payment in the database into the 8 features.
+
+### Concepts, in plain words
+**Why a model on top of rules.** The policy blocks what the user's mandate forbids. Some payments are
+allowed by the rules but still look wrong: four payments in a minute, at 2 a.m., to a shop never used,
+each just under the limit, budget nearly gone. The model scores that "looks like a hijacked agent"
+pattern so the orchestrator can ask the human (STEP_UP).
+
+**XGBoost (gradient-boosted trees).** Many small decision trees, each fixing the previous trees'
+mistakes. Strong on table-shaped data like ours, fast, small to ship (180 KB here).
+
+**SHAP values.** For one prediction, how much each feature pushed the score up or down. They add up
+exactly to the model's raw output. We show the top features that pushed it up as the reasons, in
+plain words. XGBoost computes them itself (`pred_contribs`), so no extra library is needed.
+
+**Synthetic data, honestly.** No dataset of hijacked shopping agents exists, so the training data is
+generated from written-down assumptions (normal: spaced out, known shops, daytime, well under limits;
+hijacked: bursts, new shops, near limits, odd hours). Some of each class is blended to overlap. The
+high hold-out scores (AUC 0.996) say the model learned those assumptions, not that it would score
+that well on real traffic.
+
+**Missing is not zero.** "No earlier payment" is stored as missing (NaN), not 0 seconds; 0 seconds
+would look like the most extreme burst. XGBoost learns where missing values should go.
+
+**Thresholds are a product choice.** At 0.5 the model catches 93% of synthetic attacks with 0.4% false
+alarms; at 0.9, 88% with none. STEP_UP at 0.5 (ask the human) and BLOCK at 0.9 is the suggestion.
+
+### Likely interview questions
+1. **How do you explain a single model decision?** SHAP values: per-feature contributions that add up
+   to the prediction; the top positive ones become the reasons shown to the user.
+2. **Your data is synthetic. Why trust the model?** As a demonstration of the layer and its interface,
+   not as a claim of accuracy. In production it would be retrained on real labelled traffic and the
+   thresholds set from that. The rules and the human step-up remain the hard guarantees.
+3. **What if the model is down or the file is wrong?** Scoring raises, and the orchestrator uses
+   STEP_UP (fail safe). A model trained on different features is refused at load time.
+4. **Why can't the model unblock a payment?** It runs only after the policy said ALLOW and can only
+   add STEP_UP or BLOCK; a learned model must never override a deterministic rule (D2).
+5. **How do you make training reproducible?** Fixed seed, single thread, saved feature list and version
+   inside the model file; the test suite checks the committed model's metadata.

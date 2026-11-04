@@ -176,7 +176,7 @@ class ChainCheck:
 converting `Decimal` → string and `datetime` → UTC ISO-8601 with `Z`. `float` values raise
 `TypeError` (they do not round-trip exactly).
 
-## 4. Anomaly model — `ml/score.py` (Anurag, shape only until Nov 6–8)
+## 4. Anomaly model — `backend/app/anomaly.py` (Anurag; model landed Nov 4)
 
 ```python
 def score_anomaly(features: AnomalyFeatures) -> AnomalyResult
@@ -204,6 +204,22 @@ class AnomalyResult:
 - If `score_anomaly` raises or times out, the orchestrator uses STEP_UP (D3). It never turns a
   policy BLOCK into ALLOW (D2).
 - Until the model lands, the stub returns `score=0.0, reasons=(), model_version="stub"`.
+
+Landed (Nov 4):
+- Lives in `backend/app/anomaly.py`, not `ml/score.py`, so the orchestrator imports it directly
+  (D15). Model file: `backend/app/anomaly_model.json` (XGBoost, trained on synthetic data by
+  `backend/scripts/train_anomaly.py`; deterministic). No stub any more: a missing or mismatched model
+  file raises, and the orchestrator uses STEP_UP.
+- `reasons`: up to 3 plain-language phrases for the features that pushed the score UP, from
+  XGBoost's own SHAP values (`pred_contribs`); empty when nothing did.
+- `score_anomaly` raises `ValueError`/`TypeError` for features outside the trained ranges.
+- Helper: `await build_features(session, payment_id=, mandate_id=, merchant_id=, amount=, now=,
+  window_seconds=) -> AnomalyFeatures`. Call it after `check_and_reserve` allowed the payment (5.3
+  step 2, read-only, own session): it excludes the payment's own hold and row, counts live payments
+  in the velocity window, and raises `LookupError` for an unknown mandate.
+- Suggested thresholds from the synthetic hold-out set: `ANOMALY_STEP_UP_THRESHOLD=0.5` (catches 93%,
+  0.4% false alarms) and `ANOMALY_BLOCK_THRESHOLD=0.9` (catches 88%, 0 false alarms). The sync-1
+  demo purchase ($179 of $200, first payment) scores about 0.05. Final values still agreed Nov 8.
 
 ## 5. Money path — `backend/app/` (Sahil)
 
