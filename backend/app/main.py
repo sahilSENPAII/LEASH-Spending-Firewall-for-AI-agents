@@ -1,16 +1,22 @@
 """FastAPI entrypoint. Run: uv run uvicorn app.main:app --reload (from backend/)."""
 
-from dataclasses import asdict
-from typing import Annotated
-
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import db
-from app.audit import verify_chain
+from app.config import get_settings
+from app.read_api import router as read_router
 
 app = FastAPI(title="Leash", version="0.1.0")
+# The audit console runs on its own origin (Vite dev server, or the hosted frontend).
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[o.strip() for o in get_settings().cors_origins.split(",") if o.strip()],
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
+app.include_router(read_router)
 
 
 @app.get("/health")
@@ -20,9 +26,3 @@ async def health() -> JSONResponse:
         status_code=200 if db_ok else 503,
         content={"status": "ok" if db_ok else "degraded", "db": "ok" if db_ok else "unreachable"},
     )
-
-
-@app.get("/audit/verify")
-async def audit_verify(session: Annotated[AsyncSession, Depends(db.get_session)]) -> dict:
-    """Recompute the audit hash chain: {ok, checked, first_bad_id} (docs/CONTRACTS.md 5.6)."""
-    return asdict(await verify_chain(session))

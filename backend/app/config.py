@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     velocity_window_seconds: int = 600
     # Product catalog file, relative to the repo root; empty means stores/catalog.json.
     catalog_path: str = ""
+    # Comma-separated origins allowed to call the API from a browser (the audit console).
+    cors_origins: str = "http://localhost:5173"
 
 
 @lru_cache

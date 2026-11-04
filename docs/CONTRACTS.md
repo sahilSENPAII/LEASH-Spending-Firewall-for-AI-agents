@@ -357,6 +357,18 @@ Single demo user, no auth (hackathon scope; recorded as a limitation in the READ
 | `GET /audit` | `?after_id=&limit=100` | audit entries, oldest first |
 | `GET /audit/verify` | | `ChainCheck` (`{ok, checked, first_bad_id}`) |
 
+Read routes landed (Anurag, Nov 5; `backend/app/read_api.py`, all read-only):
+- `GET /payments?limit=50` (1-500, newest first) and `GET /payments/{id}` (404 `{"detail": "payment
+  not found"}`) return the 5.4 shape plus `mandate_id`, `merchant_id`, `amount` (string, 2 decimals),
+  `currency`, `items`, `created_at`, `updated_at` (UTC ISO-8601 with `Z`). Each reason gets
+  `source: null` unless the stored reason has one.
+- `risk_score` and `judge` are read from the payment's LATEST `payment.decided` audit payload, keys
+  `risk_score` (string) and `judge` (`{match, score, reason}`). Write them there when the model and
+  the judge run and the console shows them; no schema change needed. `approval_url` is null for now.
+- `GET /audit?after_id=0&limit=100` (limit 1-1000): `[{id, created_at, event_type, payment_id,
+  payload, prev_hash, hash}]`, oldest first; page with `after_id` = the last id you got.
+- CORS: origins from `CORS_ORIGINS` (comma-separated, default `http://localhost:5173`), GET and POST.
+
 ### 5.7 Settings (env, names in `.env.example`)
 | Name | Default | Used by |
 |---|---|---|
