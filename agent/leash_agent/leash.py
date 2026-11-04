@@ -5,6 +5,7 @@ price and no amount: Leash prices each sku from its own catalog, so even a hijac
 about what it pays.
 """
 
+import asyncio
 import json
 from dataclasses import dataclass
 
@@ -43,13 +44,22 @@ def parse_result(content) -> dict:
 class McpLeash:
     """One MCP session to Leash for the whole run. Use as `async with McpLeash(connection)`."""
 
-    def __init__(self, connection: dict):
+    def __init__(self, connection: dict, startup_seconds: float = 60):
         self._client = MultiServerMCPClient({"leash": connection})
         self._tools = {}
+        self._startup_seconds = startup_seconds
 
     async def __aenter__(self):
         self._session_cm = self._client.session("leash")
-        session = await self._session_cm.__aenter__()
+        # A server that starts but never answers the MCP handshake would otherwise hang the run.
+        try:
+            async with asyncio.timeout(self._startup_seconds):
+                session = await self._session_cm.__aenter__()
+        except TimeoutError:
+            raise TimeoutError(
+                f"Leash did not answer within {self._startup_seconds:g}s; check that its MCP "
+                "server starts"
+            ) from None
         try:
             self._tools = {t.name: t for t in await load_mcp_tools(session)}
             if "request_payment" not in self._tools:

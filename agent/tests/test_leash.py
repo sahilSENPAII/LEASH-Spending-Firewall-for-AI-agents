@@ -1,3 +1,4 @@
+import asyncio
 import sys
 from pathlib import Path
 
@@ -62,6 +63,16 @@ async def test_server_without_request_payment_is_refused(tmp_path):
     leash = McpLeash({"transport": "stdio", "command": sys.executable, "args": [str(server)]})
     with pytest.raises(RuntimeError, match="no request_payment tool"):
         async with leash:
+            pass
+
+
+async def test_server_that_never_answers_times_out(tmp_path):
+    server = tmp_path / "silent_server.py"
+    server.write_text("import time\ntime.sleep(60)\n")
+    leash = McpLeash({"transport": "stdio", "command": sys.executable, "args": [str(server)]},
+                     startup_seconds=1)
+    with pytest.raises(TimeoutError, match="did not answer within 1s"):
+        async with asyncio.timeout(15), leash:  # 15s: without the limit this waits forever
             pass
 
 
