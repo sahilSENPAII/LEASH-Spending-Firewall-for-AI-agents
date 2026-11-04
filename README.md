@@ -41,7 +41,8 @@ Values go in the repo-root `.env` (git-ignored); names are listed in `.env.examp
    ```bash
    uv run python -m scripts.seed_demo_mandate
    ```
-6. Run the API, then open `http://127.0.0.1:8000/health` and `http://127.0.0.1:8000/audit/verify`:
+6. Run the API, then open `http://127.0.0.1:8000/health`, `/payments`, `/audit` and
+   `/audit/verify` (the console's origin must be in `CORS_ORIGINS`, default `http://localhost:5173`):
    ```bash
    uv run uvicorn app.main:app --reload
    ```

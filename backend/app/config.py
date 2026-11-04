@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     mandate_signing_key: str = ""
     velocity_max_payments: int = 3
     velocity_window_seconds: int = 600
+    # Comma-separated origins allowed to call the API from a browser (the audit console).
+    cors_origins: str = "http://localhost:5173"
 
 
 @lru_cache
