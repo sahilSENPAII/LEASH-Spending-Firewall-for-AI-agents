@@ -116,9 +116,6 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Claude + Codex: the attack agent is merged into `main` as `3be8391`; its tests and Ruff pass. Neon setup verification is still pending until `DATABASE_URL` is added to the ignored local `.env`.
-- Sahil: wire `build_features` and `score_anomaly` into the allowed-payment path using a read-only
-  session. Suggested thresholds: STEP_UP at 0.5 and BLOCK at 0.9; any scoring error -> STEP_UP.
 - Anurag + Claude + Codex: review fixes are merged into `main` as `8cfd974`; rerun the stand-in dry-run
   after the Playwright Node driver memory issue is resolved. Neon setup verification is still pending.
 - Sahil + Claude: next is `request_payment(mandate_id, merchant_id, items=[{sku, quantity}])` with a
@@ -180,6 +177,11 @@ Ask Sahil for the shared sandbox values.
 - [ ] Anurag (Nov 5–6): AG Grid audit console (needs `GET /audit` and `GET /payments`).
 
 ## Log (newest first)
+
+### 2026-11-05 00:29 IST — Anurag + Claude + Codex
+- Removed the stale attack-agent entry from In progress and left Sahil's anomaly-wiring task unticked
+  under Next up.
+- Files: `CONTEXT.md`.
 
 ### 2026-11-05 00:24 IST — Anurag + Claude + Codex
 - Pushed review-fix commit `8cfd974` to `origin/anurag` and fast-forwarded it into `main`.
