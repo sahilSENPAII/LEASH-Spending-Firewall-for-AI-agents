@@ -34,7 +34,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 | M0 | Oct 30–31 | Setup + 3 de-risking spikes | **Done** |
 | M1 | Oct 31–Nov 1 | Thin end-to-end flow + deploy: Claude pays $1 sandbox via hosted Leash | Local flow **done** (Claude Desktop paid $1 sandbox through the orchestrator); hosted deploy pending (Sahil, Render) |
 | M2 | Nov 2–3 | Mandates (Ed25519), policy engine, state machine, idempotency, saga, hash-chained audit | **Mostly done**: policy, signed mandates, budget holds, audit chain (Anurag); state machine, idempotency keys, void on capture failure (Sahil). Orchestrator switch to `check_and_reserve` / `release_budget` / `append_audit` and migration `0002` on Neon **done** (Nov 3). Budget lock proven on Neon under concurrency; saga reconcile added (Nov 4) |
-| M3 | Nov 4–5 | Attack demo: SoundHub + MegaDeals stores, LangGraph agent, injection blocked | Agent pushed to `anurag` (`5372fa2`); 45 agent tests pass, pending merge |
+| M3 | Nov 4–5 | Attack demo: SoundHub + MegaDeals stores, LangGraph agent, injection blocked | Agent merged into `main` as `3be8391`; 45 agent tests pass; real-store integration pending |
 | M4 | Nov 6–7 | Groq intent judge + XGBoost/SHAP anomaly model | — |
 | M5 | Nov 8 | Step-up approval via web page, survives restart | — |
 | M6 | Nov 9–10 | React frontend + AG Grid audit console. **Feature freeze Nov 10 23:59** | — |
@@ -87,8 +87,8 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
   Playwright, scripted or Groq planning, stand-in stores, and Leash's MCP payment tool; D14 records
   the design. All 45 agent tests pass, including browser and backend end-to-end tests. Agent Ruff
   passes; backend tests pass (330 passed, 1 skipped), and Ruff passes for the changed MCP server.
-  The stand-in attack dry-run planned the gift-card injection and sent no payment. The branch is not
-  merged.
+  The stand-in attack dry-run planned the gift-card injection and sent no payment. Merged into `main`
+  as `3be8391`.
 
 ## Env vars (names only — values live in each person's local `.env`)
 `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_BASE_URL`, `SANDBOX_BUYER_EMAIL`,
@@ -100,7 +100,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Codex: attack-agent commit `5372fa2` is pushed to `anurag`; its tests and Ruff pass. It is pending review/merge. Neon setup verification is still pending until `DATABASE_URL` is added to the ignored local `.env`.
+- Anurag + Codex: the attack agent is merged into `main` as `3be8391`; its tests and Ruff pass. Neon setup verification is still pending until `DATABASE_URL` is added to the ignored local `.env`.
 - Sahil + Claude: next is `request_payment(mandate_id, merchant_id, items=[{sku, quantity}])` with a
   shared server-side catalog and the demo stores (SoundHub :8101, MegaDeals :8102); then HTTP MCP
   transport + `list_mandates` / `get_payment_status`, Render deploy, Groq intent judge (`app/judge.py`).
@@ -145,10 +145,19 @@ Ask Sahil for the shared sandbox values.
       (merged into `main` from `sahil`).
 - [x] Sahil: MCP `request_payment` + orchestrator (merged into `main` from `sahil`).
 - [ ] Sahil: MCP `list_mandates` / `get_payment_status`.
-- [ ] Both: review and merge the attack-agent commit from `anurag`. Then point the agent at Sahil's
-      real stores when available; do not run `normal` against Neon without Sahil.
+- [x] Anurag + Codex: merge the attack-agent commit from `anurag` directly into `main` (`3be8391`,
+      Nov 4).
+- [ ] Anurag: point the agent at Sahil's real stores when available, then continue the anomaly-model
+      synthetic data generator. Do not run `normal` against Neon without Sahil.
 
 ## Log (newest first)
+
+### 2026-11-04 23:28 IST — Anurag + Codex
+- Merged `anurag` directly into `main` as merge commit `3be8391` (agent commit `5372fa2`), per request.
+  No PR was created.
+- Agent tests passed (45); agent Ruff passed. Backend tests passed (330 passed, 1 skipped), and the
+  stand-in attack dry-run sent no payment.
+- Files: `CONTEXT.md`; the agent code is recorded in the merge commit.
 
 ### 2026-11-04 23:23 IST — Anurag + Codex
 - Installed Python 3.12.14, agent dependencies, and Playwright Chromium after approval.
