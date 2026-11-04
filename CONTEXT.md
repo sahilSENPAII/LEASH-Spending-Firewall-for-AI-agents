@@ -106,8 +106,9 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1â
   `Authorization: Bearer ...`; stdio mode is unchanged. The supplied handoff reports a local-Postgres
   rehearsal with the real backend and stores: attack BLOCKED (`mixed_categories`) and
   `/audit/verify` OK. It reports 487 backend tests passed (1 skipped) and 53 agent tests passed.
-  In this workspace, 52 agent tests passed excluding `test_e2e_backend.py`, which stalled on both
-  this commit and unmodified `origin/main`.
+  The supplied report says `test_e2e_backend.py` passes in another checkout (~5s); it stalled in the
+  Codex workspace. `McpLeash` now limits startup to 60s (`df7a1af`). Here, 53 agent tests pass with
+  that E2E test excluded; the full-suite E2E check in Anurag's PowerShell remains pending.
 - The agent end-to-end test accepts `merchant_not_allowed` or `mixed_categories` while still requiring
   `BLOCK` and `BLOCKED`.
 
@@ -146,10 +147,10 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1â
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Claude + Codex: hosted Leash bearer-token support (`14c0bab`) is merged; the agent sends
-  `AGENT_LEASH_TOKEN` only when using HTTP, while stdio remains unchanged. Ruff is clean; 52 tests
-  pass when the baseline-stalling backend E2E test is excluded. Next planned work is the AG Grid
-  console in `frontend/`.
+- Anurag + Claude + Codex: bearer-token support (`14c0bab`) and the MCP startup timeout (`df7a1af`)
+  are merged. The affected `test_leash.py` module passes (11); 53 agent tests pass with
+  `test_e2e_backend.py` excluded, and Ruff is clean. The full agent E2E run in Codex still stalls;
+  verify it in Anurag's PowerShell. Next planned work is the AG Grid console in `frontend/`.
 - Sahil + Claude: Render deploy of the backend with hosted MCP at `/mcp` (token `MCP_AUTH_TOKEN`), then
   the hosted $1 test (sync 1); then Groq intent judge (`app/judge.py`) and step-up approvals (M5).
 
@@ -204,10 +205,18 @@ Ask Sahil for the shared sandbox values.
       while keeping `agent/standin_stores/` for tests/offline runs (`aaf269b`).
 - [x] Anurag + Claude + Codex: send `AGENT_LEASH_TOKEN` as the bearer header when using hosted
       `/mcp`; stdio remains unchanged (`14c0bab`).
+- [x] Anurag + Claude + Codex: stop startup from waiting forever when Leash does not answer; fail
+      after 60s with a clear error (`df7a1af`).
+- [ ] Anurag: run the full agent suite in local PowerShell; the Codex run stalls at
+      `test_e2e_backend.py`. Record whether it passes or the captured error.
 - [ ] Sahil: after Render deploy, share `MCP_AUTH_TOKEN` by DM; Anurag sets
       `AGENT_LEASH_URL=https://<service>.onrender.com/mcp` and `AGENT_LEASH_TOKEN`, then runs `attack`.
 - [ ] Sahil: write `risk_score` (string) and `judge` into the `payment.decided` audit payload when
       the model and judge run; the console reads them from there.
+- [ ] Sahil: when the intent judge lands, store its `score` as a string in the audit payload; the
+      audit chain rejects floats.
+- [ ] Both: wake the Render service with `GET /health` before hosted-agent demos; free-tier cold
+      starts can exceed the HTTP MCP client's 30s timeout.
 - [x] Anurag: run `uv run python -m leash_agent attack --standin` against Neon; Leash BLOCKED the
       injected cart, `/payments` showed it, and `/audit/verify` returned 12 valid entries (Nov 5).
 - [x] Anurag: retrain the anomaly model with realistic time-of-day and near-limit examples, add the
@@ -217,6 +226,19 @@ Ask Sahil for the shared sandbox values.
 - [ ] Anurag (Nov 5â€“6): AG Grid audit console in `frontend/` on top of the read routes.
 
 ## Log (newest first)
+
+### 2026-11-05 03:37 IST â€” Anurag + Claude + Codex
+- Added a 60s MCP startup timeout and a silent-server regression test (`df7a1af`). It raises a clear
+  `TimeoutError` when Leash does not answer during session startup; payment-call timeouts are unchanged.
+- Backend: 487 passed, 1 skipped. `agent/tests/test_leash.py`: 11 passed; 53 agent tests passed with
+  `test_e2e_backend.py` excluded; Ruff clean. The full agent run stalled at that E2E test in Codex.
+  It also stalled on unmodified `origin/main` before this patch. The supplied report says it passes
+  in another checkout. Anurag's local PowerShell result is pending.
+- The timeout test passes with the patch. With `leash.py` restored to the old implementation, it
+  fails immediately because `startup_seconds` is unsupported; the supplied guide's stated 15s guard
+  did not occur in this local run.
+- Pushed `df7a1af` to `anurag` and fast-forwarded it into `main`. Part D was not sent to Sahil.
+- Files: `agent/leash_agent/leash.py`, `agent/tests/test_leash.py`, `CONTEXT.md`.
 
 ### 2026-11-05 03:20 IST â€” Sahil + Claude
 - Merged to `main` (`c0254f7`): anomaly wiring (`820d249`) on top of Anurag's model v2, and hosted MCP
