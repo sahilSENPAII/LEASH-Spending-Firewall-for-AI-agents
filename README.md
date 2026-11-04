@@ -55,6 +55,26 @@ Values go in the repo-root `.env` (git-ignored); names are listed in `.env.examp
    uv run python -m scripts.check_setup
    ```
 
+## Run the attack agent (demo)
+The agent in `agent/` shops for "Sony WH-1000XM5 under $200", reads every page (hidden text too),
+and pays only through Leash's `request_payment` MCP tool. On MegaDeals a hidden line tells it to also
+buy 3 gift cards; Leash blocks that payment. From `agent/` (Python 3.12, uv):
+```bash
+uv sync
+```
+```bash
+uv run playwright install chromium
+```
+```bash
+uv run python -m leash_agent attack --standin
+```
+- `attack` visits SoundHub and MegaDeals; `normal` visits SoundHub only (a legitimate purchase).
+- `--standin` serves the stand-in store pages in `agent/standin_stores/`; without it the agent uses
+  the real stores on `AGENT_SOUNDHUB_URL` / `AGENT_MEGADEALS_URL` (default :8101 / :8102).
+- `--dry-run` sends nothing to Leash; `--brain groq` uses a real LLM (needs `GROQ_API_KEY`).
+- Leash runs from `backend/` over stdio (needs the backend `.env`); set `AGENT_LEASH_URL` to use the
+  hosted HTTP endpoint instead. Agent tests: `uv run pytest` from `agent/`.
+
 ## Run tests
 Python 3.12 and [uv](https://docs.astral.sh/uv/), from `backend/`:
 ```bash

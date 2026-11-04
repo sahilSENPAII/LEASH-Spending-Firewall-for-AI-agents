@@ -1,0 +1,34 @@
+[project]
+name = "leash-agent"
+version = "0.1.0"
+description = "Demo shopping agent that gets prompt-injected; Leash blocks its payments"
+requires-python = ">=3.12"
+dependencies = [
+    "langgraph>=0.2",
+    "langchain-core>=0.3",
+    "langchain-groq>=0.2",
+    "langchain-mcp-adapters>=0.1",
+    "mcp>=1.2,<2",
+    "playwright>=1.45",
+    "pydantic-settings>=2.4",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.6",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
