@@ -137,9 +137,9 @@ Ask Sahil for the shared sandbox values.
   console in `frontend/`. The end-to-end test compatibility fix is merged as `6d05bfd`; 52 agent tests
   pass and Ruff is clean. The scripted stand-in attack against Neon was BLOCKED; `/payments` showed
   the $449.00 blocked cart and `/audit/verify` confirmed 12 valid entries.
-- Sahil + Claude: shared-catalog pricing, items-based `request_payment`, and demo stores are on
-  `sahil` but not yet merged; then HTTP MCP transport + `list_mandates` / `get_payment_status`, Render
-  deploy, and Groq intent judge (`app/judge.py`).
+- Sahil + Claude: anomaly wiring is on `sahil` (`820d249`), not merged: it waits for Anurag's model fix
+  for the time-of-day finding (see the Sahil 02:15 log entry). Next: HTTP MCP transport +
+  `list_mandates` / `get_payment_status`, Render deploy, Groq intent judge (`app/judge.py`).
 
 ## Next up
 - [x] Sahil: Python 3.12 via uv; Neon project `leash` (AWS us-east-1), `DATABASE_URL` in `.env`.
@@ -206,6 +206,25 @@ Ask Sahil for the shared sandbox values.
 - [ ] Anurag (Nov 5–6): AG Grid audit console in `frontend/` on top of the read routes.
 
 ## Log (newest first)
+
+### 2026-11-05 02:15 IST — Sahil + Claude
+- Merged to `main` (`b8690bb`): shared catalog `stores/catalog.json` (new setting `CATALOG_PATH`), demo
+  stores (`python -m stores.serve`, SoundHub :8101, MegaDeals :8102; hidden injection on MegaDeals
+  `md-sony-xm5`), and `request_payment(mandate_id, merchant_id, items=[{sku, quantity}])` priced by
+  Leash. New BLOCK reason codes: `empty_cart`, `unknown_sku`, `sku_wrong_merchant`, `invalid_quantity`,
+  `mixed_categories`. `docs/LEARN.md` money-path section added. `config.py` conflict resolved by keeping
+  both `catalog_path` and `cors_origins`. Backend 392 passed, 1 skipped; agent tests pass.
+  `docs/CONTRACTS.md` 5.2–5.5 and 5.7 updated to match. Anurag can drop the old-shape fallback.
+- Anomaly wiring committed on `sahil` (`820d249`), NOT merged: model after T1 in its own session;
+  STEP_UP at >= `ANOMALY_STEP_UP_THRESHOLD` (0.5), BLOCK at >= `ANOMALY_BLOCK_THRESHOLD` (0.9), any error
+  or out-of-range score -> STEP_UP; `risk_score` as a 6-decimal string; new codes `anomaly_step_up`,
+  `anomaly_block`, `anomaly_check_failed`. Backend 401 passed.
+- Blocking finding: the real model scores the normal $179 first SoundHub purchase >= 0.5 from 19:00 to
+  02:00 UTC (00:30–07:30 IST) because of the hour-of-day feature, so honest purchases get STEP_UP at
+  night and `agent/tests/test_e2e_backend.py` fails when CI runs then (0.60 at 20:28 UTC; passes with
+  threshold 0.7). Asked Anurag to retrain so the hour weighs much less, and to make the e2e test
+  independent of the clock. The wiring merges after that.
+- Files: `CONTEXT.md`, `docs/CONTRACTS.md`.
 
 ### 2026-11-05 01:54 IST — Anurag + Claude + Codex
 - Updated the agent backend end-to-end assertion to accept `merchant_not_allowed` or

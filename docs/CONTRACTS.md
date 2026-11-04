@@ -258,6 +258,7 @@ Checked in this order. A later check can only make the outcome stricter (D2).
 
 | Check | Result | Outcome |
 |---|---|---|
+| cart check (`app/catalog.py` `price_cart`) | any problem | **BLOCK** (no mandate check, no hold) |
 | `check_and_reserve` | BLOCK | **BLOCK** (no hold, judge and model not called) |
 | `score_anomaly` | `score >= ANOMALY_BLOCK_THRESHOLD` | **BLOCK** (release hold) |
 | `judge_intent` | `match == False` | **STEP_UP** |
@@ -271,6 +272,9 @@ land, their stubs return `match=True` and `score=0.0`.
 ### 5.3 Orchestrator call order (one `request_payment`)
 No database transaction is held open across a network call (judge, model, PayPal).
 
+0. Price the cart from the catalog (`price_cart`). A cart Leash cannot price (5.5) is recorded as a
+   `REQUESTED` row, then `BLOCKED` with `payment.decided` / `payment.blocked`, without calling
+   `check_and_reserve` (no mandate lock, no hold).
 1. **T1** (one transaction): insert `payments` row `REQUESTED` → `check_and_reserve(payment_id, ...)`
    → `append_audit("payment.decided", {policy decision, reasons})`.
    - BLOCK: status `BLOCKED`, `append_audit("payment.blocked")`, commit, return BLOCK.
@@ -321,7 +325,7 @@ transaction. Events:
   "approval_url": "https://.../approvals/<payment_id> or null"
 }
 ```
-- `payment_id` is null only when the request was rejected before a row could be written (bad amount).
+- `payment_id` is null only on an internal error (no row could be written).
 - `risk_score` and `judge` are null when that check did not run (policy BLOCK, or stub).
 - Money in JSON is always a string (`"179.00"`), never a number.
 - `reasons` is empty on ALLOW.
@@ -329,15 +333,22 @@ transaction. Events:
 ### 5.5 MCP tools (agent-facing, stdio now, hosted later)
 | Tool | Arguments | Returns |
 |---|---|---|
-| `request_payment` | `mandate_id`, `merchant_id`, `items: [{name, quantity, unit_price}]` | decision response (5.4) |
+| `request_payment` | `mandate_id`, `merchant_id`, `items: [{sku, quantity}]` | decision response (5.4) |
 | `list_mandates` | none | `[{mandate_id, intent, category, max_payment_amount, remaining_budget, remaining_count, expires_at, revoked}]` |
 | `get_payment_status` | `payment_id` | decision response (5.4) for that payment |
 
-- The agent never sends `category` or a trusted price. Leash looks up the merchant and item prices
-  from its own store records (`MERCHANT_CATEGORIES` now, a `merchants` table later if needed) and
-  computes the amount itself.
-- Change from today's code: `request_payment` currently takes `amount: str` and `items: str`. It moves
-  to the item list above when the judge lands, so the judge and the price check see structured items.
+- The agent sends SKUs and quantities only, never a price, amount or category. Leash prices each line
+  from its catalog (`stores/catalog.json`, setting `CATALOG_PATH`), the same file the demo stores are
+  built from. The amount is the sum of price × quantity; the category is the single category of the
+  items.
+- A cart Leash cannot price is blocked before the mandate check (no hold), with these reason codes
+  (source `system`): `empty_cart`, `unknown_sku`, `sku_wrong_merchant` (the SKU belongs to another
+  store), `invalid_quantity` (not an integer from 1 to 10), `mixed_categories` (items from more than one
+  category).
+- `payments.items` stores the lines as JSON: `[{sku, quantity, unit_price}]`, with `unit_price` only on
+  lines Leash priced.
+- Demo stores: `python -m stores.serve` serves SoundHub on `:8101` and MegaDeals on `:8102`, built from
+  the catalog. The MegaDeals `md-sony-xm5` page holds the hidden injection (3 × `md-giftcard-100`).
 - The agent never sees PayPal IDs or credentials.
 
 ### 5.6 REST API (frontend-facing)
@@ -374,6 +385,7 @@ Read routes landed (Anurag, Nov 5; `backend/app/read_api.py`, all read-only):
 |---|---|---|
 | `VELOCITY_MAX_PAYMENTS` | `3` | `check_and_reserve` |
 | `VELOCITY_WINDOW_SECONDS` | `600` | `check_and_reserve` |
+| `CATALOG_PATH` | empty = `stores/catalog.json` | `app/catalog.py` |
 | `JUDGE_MODEL` | `groq/llama-3.3-70b-versatile` | `judge_intent` |
 | `JUDGE_TIMEOUT_SECONDS` | `5` | orchestrator |
 | `ANOMALY_STEP_UP_THRESHOLD` | agreed Nov 8 | orchestrator |
