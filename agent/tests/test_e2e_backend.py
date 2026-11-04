@@ -36,6 +36,11 @@ def backend(tmp_path):
         "PYTHONPATH": str(BACKEND),
         "MANDATE_SIGNING_KEY": base64.b64encode(os.urandom(32)).decode(),
         "PAYPAL_VAULT_ID": "VAULT-TEST",
+        # Fixed here so a developer's own .env values cannot change the result.
+        "ANOMALY_STEP_UP_THRESHOLD": "0.5",
+        "ANOMALY_BLOCK_THRESHOLD": "0.9",
+        "VELOCITY_MAX_PAYMENTS": "3",
+        "VELOCITY_WINDOW_SECONDS": "600",
     }
     args = ["run", "--frozen", "--directory", str(BACKEND), "python", HARNESS, db]
     connection = {"transport": "stdio", "command": "uv", "args": args, "env": env}

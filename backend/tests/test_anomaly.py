@@ -55,7 +55,7 @@ def test_committed_model_is_synthetic_and_matches_the_features():
     booster = load_model()
     assert booster.attr("data") == "synthetic"
     assert booster.attr("features") == ",".join(FEATURES)
-    assert booster.attr("version").startswith("synthetic-v1-")
+    assert booster.attr("version").startswith("synthetic-v2-")
     assert float(booster.attr("auc")) > 0.95
 
 
@@ -71,6 +71,34 @@ def test_burst_scores_high_with_readable_reasons():
     assert 1 <= len(result.reasons) <= 3
     assert all(isinstance(r, str) and r for r in result.reasons)
     assert "only 40s since the previous payment" in result.reasons
+
+
+# An honest purchase must not look anomalous just because of the time of day (Sahil, Nov 5:
+# the v1 model stepped up the demo purchase between 19:00 and 02:00 UTC).
+HONEST = {
+    "first purchase near the limit": DEMO,
+    "second purchase near the limit, new shop, a day later": AnomalyFeatures(
+        amount=Decimal("195.00"),
+        amount_to_max_ratio=0.975,
+        budget_used_ratio=0.4,
+        payment_count=1,
+        recent_payment_count=0,
+        seconds_since_last_payment=86_400.0,
+        merchant_seen_before=False,
+        hour_of_day_utc=0,
+    ),
+}
+
+
+@pytest.mark.parametrize("name", HONEST)
+@pytest.mark.parametrize("hour", range(24))
+def test_honest_purchases_score_low_at_every_hour(name, hour):
+    assert score_anomaly(replace(HONEST[name], hour_of_day_utc=hour)).score < 0.3
+
+
+@pytest.mark.parametrize("hour", range(24))
+def test_bursts_score_high_at_every_hour(hour):
+    assert score_anomaly(replace(BURST, hour_of_day_utc=hour)).score > 0.9
 
 
 def test_same_input_same_output():

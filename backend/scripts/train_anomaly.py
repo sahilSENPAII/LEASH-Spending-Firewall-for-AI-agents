@@ -23,28 +23,43 @@ class Sample:
     label: int  # 1 = looks like a hijacked agent
 
 
+NIGHT_UTC = (18, 19, 20, 21, 22, 23, 0, 1)  # 23:30-07:30 IST
+
+
+def _hour(rng: random.Random, usual: tuple[int, ...], share: float) -> int:
+    # Time of day is only a weak hint: people also shop at night, and attacks also run by day.
+    return rng.choice(usual) if rng.random() < share else rng.randint(0, 23)
+
+
 def _normal(rng: random.Random) -> list[float]:
-    """A user's own agent: few, spaced-out payments, known shops, daytime, well under the limit."""
+    """A user's own agent: few, spaced-out payments, any amount up to the limit, mostly daytime.
+
+    Buying close to the limit is normal (people set the limit just above the price they expect),
+    and so is a first purchase at a new shop or a late-night purchase.
+    """
     limit = rng.choice(LIMITS)
-    ratio = min(rng.betavariate(2, 3), 1.0)
+    ratio = min(rng.betavariate(2, 3), 1.0) if rng.random() < 0.5 else rng.uniform(0.55, 1.0)
     count = rng.choice((0, 0, 1, 1, 2, 3))
     seconds = math.nan if count == 0 else rng.uniform(3_600, 14 * 86_400)
     return [
         round(ratio * limit, 2),
         ratio,
-        rng.uniform(0, 0.6) if count else 0.0,
+        rng.uniform(0, 0.7) if count else 0.0,
         count,
         0 if rng.random() < 0.9 else 1,
         seconds,
-        1.0 if count and rng.random() < 0.7 else 0.0,
-        rng.randint(2, 17),  # 07:30-22:30 IST
+        1.0 if count and rng.random() < 0.5 else 0.0,
+        _hour(rng, tuple(range(2, 18)), 0.75),  # mostly 07:30-23:30 IST
     ]
 
 
 def _hijacked(rng: random.Random) -> list[float]:
-    """A tricked agent: bursts, new shops, amounts near the limit, odd hours, budget nearly gone."""
+    """A tricked agent: bursts of payments seconds apart, new shops, budget nearly gone.
+
+    These are the real signals. Amount near the limit and night time only lean this way.
+    """
     limit = rng.choice(LIMITS)
-    ratio = rng.uniform(0.8, 1.0)
+    ratio = rng.uniform(0.75, 1.0)
     count = rng.randint(1, 6)
     return [
         round(ratio * limit, 2),
@@ -52,9 +67,9 @@ def _hijacked(rng: random.Random) -> list[float]:
         rng.uniform(0.5, 0.98),
         count,
         rng.randint(1, 6),
-        rng.uniform(2, 180),
+        rng.uniform(2, 180) if rng.random() < 0.8 else rng.uniform(180, 900),
         1.0 if rng.random() < 0.15 else 0.0,
-        rng.choice((18, 19, 20, 21, 22, 23, 0, 1)),  # late night / early morning IST
+        _hour(rng, NIGHT_UTC, 0.5),
     ]
 
 
@@ -139,7 +154,7 @@ def main(argv=None) -> None:
 
     samples = make_samples(args.samples, args.seed)
     booster, metrics = train(samples, args.rounds, args.seed)
-    tag = f"synthetic-v1-seed{args.seed}-n{args.samples}-r{args.rounds}"
+    tag = f"synthetic-v2-seed{args.seed}-n{args.samples}-r{args.rounds}"
     booster.set_attr(features=",".join(FEATURES), version=tag, data="synthetic",
                      **{k: str(v) for k, v in metrics.items()})
     booster.save_model(args.out)

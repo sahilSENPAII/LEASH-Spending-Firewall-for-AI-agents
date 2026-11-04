@@ -3,15 +3,15 @@
 Started by tests/test_e2e_backend.py inside the BACKEND's environment:
   uv run --directory ../backend python tests/backend_harness.py <sqlite-file>
 Everything Leash does is real (orchestrator, check_and_reserve, policy, audit chain) except the
-database (SQLite, not Neon) and PayPal (a fake that authorizes and captures). Needs
-MANDATE_SIGNING_KEY in the environment; it seeds m_demo with the demo terms.
+database (SQLite, not Neon), PayPal (a fake that authorizes and captures) and the clock (pinned to
+FIXED_NOW). Needs MANDATE_SIGNING_KEY in the environment; it seeds m_demo with the demo terms.
 """
 
 import asyncio
 import sys
 from datetime import UTC, datetime
 
-from app import mcp_server
+from app import mcp_server, orchestrator
 from app.audit import verify_chain
 from app.mandates import MandateTerms, create_mandate, get_mandate
 from app.models import Base
@@ -20,6 +20,19 @@ from scripts.seed_demo_mandate import DEMO_TERMS
 from sqlalchemy import BigInteger
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.ext.compiler import compiles
+
+# Every payment in the test happens at this fixed daytime instant (14:30 IST), so the result does
+# not depend on when the test runs (the anomaly model looks at the hour of day).
+FIXED_NOW = datetime(2026, 11, 4, 9, 0, tzinfo=UTC)
+_request_payment = orchestrator.request_payment
+
+
+async def _request_payment_at_fixed_time(*args, **kwargs):
+    kwargs.setdefault("now", FIXED_NOW)
+    return await _request_payment(*args, **kwargs)
+
+
+orchestrator.request_payment = _request_payment_at_fixed_time
 
 
 @compiles(BigInteger, "sqlite")
