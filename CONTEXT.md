@@ -10,7 +10,8 @@ Two people (Sahil + teammate) work on this repo. This is their shared handoff lo
    "Current state", "In progress", "Next up", add a log entry at the **top** of the Log, then push it on
    `main` (rule 8).
 4. Log entries: date (IST), who (person + agent), what changed, files touched, anything left half-done,
-   anything the other side must know (new env vars, migrations, broken things).
+   anything the other side must know (new env vars, migrations, broken things). For Anurag's work,
+   use the attribution `Anurag + Claude + Codex`.
 5. Decisions with trade-offs go in `docs/DECISIONS.md`; concepts and interview notes in `docs/LEARN.md`.
 6. Never put secrets here. New env vars: add the *name* to `.env.example` and mention it in the log.
 7. Small commits, push often. If `git pull` conflicts in this file, keep both sides' entries.
@@ -107,7 +108,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Codex: the attack agent is merged into `main` as `3be8391`; its tests and Ruff pass. Neon setup verification is still pending until `DATABASE_URL` is added to the ignored local `.env`.
+- Anurag + Claude + Codex: the attack agent is merged into `main` as `3be8391`; its tests and Ruff pass. Neon setup verification is still pending until `DATABASE_URL` is added to the ignored local `.env`.
 - Sahil: wire `build_features` and `score_anomaly` into the allowed-payment path using a read-only
   session. Suggested thresholds: STEP_UP at 0.5 and BLOCK at 0.9; any scoring error -> STEP_UP.
 - Sahil + Claude: next is `request_payment(mandate_id, merchant_id, items=[{sku, quantity}])` with a
@@ -154,7 +155,7 @@ Ask Sahil for the shared sandbox values.
       (merged into `main` from `sahil`).
 - [x] Sahil: MCP `request_payment` + orchestrator (merged into `main` from `sahil`).
 - [ ] Sahil: MCP `list_mandates` / `get_payment_status`.
-- [x] Anurag + Codex: merge the attack-agent commit from `anurag` directly into `main` (`3be8391`,
+- [x] Anurag + Claude + Codex: merge the attack-agent commit from `anurag` directly into `main` (`3be8391`,
       Nov 4).
 - [ ] Anurag: point the attack agent at Sahil's real stores when available. Do not run `normal`
       against Neon without Sahil.
@@ -166,7 +167,12 @@ Ask Sahil for the shared sandbox values.
 
 ## Log (newest first)
 
-### 2026-11-04 23:48 IST — Anurag + Codex
+### 2026-11-04 23:50 IST — Anurag + Claude + Codex
+- Set the attribution for Anurag's Context entries to `Anurag + Claude + Codex` and corrected the
+  recent Nov 4 entries.
+- Files: `CONTEXT.md`.
+
+### 2026-11-04 23:48 IST — Anurag + Claude + Codex
 - Pushed `ac1f611` to `origin/anurag` and merged directly into `main` as `4abf400`, per request; no PR.
 - Backend: 354 passed, 1 skipped; agent: 45 passed; Ruff clean in both projects. Sample scores:
   burst `0.999974`, demo purchase `0.045706`. The initial parallel test run hit an OpenBLAS allocation
@@ -174,7 +180,7 @@ Ask Sahil for the shared sandbox values.
 - Files: anomaly model code, synthetic trainer, model, tests, dependency lock, contracts, D15, learning
   notes, `ml/README.md`; `CONTEXT.md` records the merge.
 
-### 2026-11-04 23:43 IST — Anurag + Codex
+### 2026-11-04 23:43 IST — Anurag + Claude + Codex
 - Applied the anomaly-model patch as commit `ac1f611` on local `anurag`: synthetic generator,
   XGBoost training, `score_anomaly`, `build_features`, model JSON, tests, D15, contract and learning
   notes, and `ml/README.md`.
@@ -186,26 +192,26 @@ Ask Sahil for the shared sandbox values.
   `backend/tests/test_anomaly.py`, `backend/{pyproject.toml,uv.lock}`, `docs/{CONTRACTS,DECISIONS,LEARN}.md`,
   `ml/README.md`, `CONTEXT.md`.
 
-### 2026-11-04 23:37 IST — Anurag + Codex
+### 2026-11-04 23:37 IST — Anurag + Claude + Codex
 - Claimed anomaly-model item 2 on `anurag`: synthetic data, XGBoost model, anomaly scoring and
   database feature building. The scorer is not yet wired into the orchestrator.
 - Files: `CONTEXT.md`.
 
-### 2026-11-04 23:28 IST — Anurag + Codex
+### 2026-11-04 23:28 IST — Anurag + Claude + Codex
 - Merged `anurag` directly into `main` as merge commit `3be8391` (agent commit `5372fa2`), per request.
   No PR was created.
 - Agent tests passed (45); agent Ruff passed. Backend tests passed (330 passed, 1 skipped), and the
   stand-in attack dry-run sent no payment.
 - Files: `CONTEXT.md`; the agent code is recorded in the merge commit.
 
-### 2026-11-04 23:23 IST — Anurag + Codex
+### 2026-11-04 23:23 IST — Anurag + Claude + Codex
 - Installed Python 3.12.14, agent dependencies, and Playwright Chromium after approval.
 - Agent suite: 45 passed; agent Ruff clean. Backend suite: 330 passed, 1 skipped; backend MCP Ruff
   clean. `attack --standin --dry-run` showed the injected gift-card request and sent no payment.
 - Pushed `5372fa2` to `origin/anurag`. It is not merged to `main` yet.
 - Files: no code changes after `5372fa2`; `CONTEXT.md` records verification and branch status.
 
-### 2026-11-04 23:16 IST — Anurag + Codex
+### 2026-11-04 23:16 IST — Anurag + Claude + Codex
 - Applied the LangGraph attack-agent patch as one commit on local `anurag` (`5372fa2`, 35 files):
   `agent/`, CI, README, D14, LEARN notes, and the MCP log-level option.
 - Backend suite: 330 passed, 1 skipped. Ruff passes for `agent/leash_agent`, `agent/tests`, and
