@@ -79,3 +79,16 @@ One entry per decision: what we chose, what we rejected, why. Newest at the bott
   check on the payment, not the agent's judgement (D2).
 - Until the switch to `items=[{sku, quantity}]` lands, the agent reads the tool's schema and also
   fills the old shape (`amount` + `items` string). That fallback is removed once the switch is merged.
+
+## D15. Anomaly model in the backend, XGBoost's own SHAP values, synthetic data
+- `backend/app/anomaly.py` holds the feature list, `build_features` and `score_anomaly`;
+  `backend/scripts/train_anomaly.py` generates the data and trains. One feature list for training and
+  scoring, and the orchestrator imports it directly. `ml/` keeps only a README pointing here.
+- Reasons come from XGBoost's `pred_contribs` (exact TreeSHAP), not the `shap` package: same numbers,
+  no heavy dependency (numba, llvmlite) in the Render deploy.
+- Dependency: `xgboost-cpu` (2-6 MB wheel) everywhere except macOS, which has no `xgboost-cpu`
+  wheel and gets plain `xgboost` (2.5 MB there). The full Linux `xgboost` wheel is about 58 MB.
+- Data is synthetic and labelled so (no real hijacked-agent data exists). Training is deterministic
+  (fixed seed, one thread) so the committed model can be rebuilt byte for byte.
+- The model only runs after the policy said ALLOW and can only make a decision stricter (D2); any
+  scoring error means STEP_UP (D3).
