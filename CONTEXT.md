@@ -80,9 +80,22 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
   has database setup steps. `gen_mandate_key.py` now says one key per database. 274 tests pass.
 
 - Read-only setup checker: `cd backend && uv run python -m scripts.check_setup` reports database
-  reachability, a shareable signing-key fingerprint, migration `0002`, `m_demo` signature, and audit
-  chain validity; it never writes. Anurag's Neon check is pending because `DATABASE_URL` is not set in
-  the local `.env`. Public-key fingerprint: `3c914ba04924`. The current suite has 287 passing tests.
+  reachability, a shareable signing-key fingerprint, the current migration, `m_demo` signature, and
+  audit-chain validity; it never writes. Neon verification is pending: the local `.env` has no
+  `DATABASE_URL`, and its signing-key fingerprint (`3c914ba04924`) differs from the shared-key
+  fingerprint Sahil provided (`cd628e356acd`). Do not use the local key for Neon.
+
+- Read-only console APIs are merged into `main` as `783a1ed`: `GET /payments`,
+  `GET /payments/{id}`, paged `GET /audit`, and `GET /audit/verify` in `backend/app/read_api.py`.
+  Money is returned as strings and timestamps as UTC ISO-8601 with `Z`; `risk_score` and `judge` are
+  read from the latest `payment.decided` audit payload. CORS uses `CORS_ORIGINS`; backend is pinned to
+  Python 3.12. Backend tests: 363 passed, 1 skipped; Ruff clean.
+
+- Sahil's answers (Nov 5, per the supplied handoff): per-SKU categories; mixed-category carts BLOCK
+  with their own reason; `md-giftcard-100` is a $100.00 MegaDeals SKU; the demo stores follow the
+  agent's stand-in pages; anomaly wiring follows the items switch (STEP_UP >= 0.5, BLOCK >= 0.9,
+  final thresholds by Nov 8); sync 2 is Nov 6 evening IST. `attack` on Neon is allowed; run `normal`
+  only with Sahil.
 
 - LangGraph attack agent is implemented in `agent/` and pushed to `anurag` as `5372fa2`. It uses
   Playwright, scripted or Groq planning, stand-in stores, and Leash's MCP payment tool; D14 records
@@ -111,13 +124,16 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 `MERCHANT_SOUNDHUB_EMAIL`, `MERCHANT_MEGADEALS_EMAIL`, `PLATFORM_MERCHANT_EMAIL`, `GROQ_API_KEY`,
 `PAYPAL_VAULT_ID` (saved demo-buyer wallet token), `DATABASE_URL`, `DATABASE_URL_POOLED` (Neon),
 `MANDATE_SIGNING_KEY` (base64 Ed25519 private key; generate once per database with `uv run python -m scripts.gen_mandate_key` from `backend/`, then provision the same key securely for Sahil, Anurag, and Render; a different key makes signature verification fail and blocks payments),
-`VELOCITY_MAX_PAYMENTS` (default 3), `VELOCITY_WINDOW_SECONDS` (default 600), `AGENT_LEASH_URL`,
+`VELOCITY_MAX_PAYMENTS` (default 3), `VELOCITY_WINDOW_SECONDS` (default 600),
+`CORS_ORIGINS` (comma-separated browser origins; default `http://localhost:5173`), `AGENT_LEASH_URL`,
 `AGENT_MANDATE_ID`, `AGENT_SOUNDHUB_URL`, `AGENT_MEGADEALS_URL`, `AGENT_BRAIN`, `AGENT_CHROMIUM_PATH`.
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Claude + Codex: review fixes are merged into `main` as `8cfd974`; rerun the stand-in dry-run
-  after the Playwright Node driver memory issue is resolved. Neon setup verification is still pending.
+- Anurag + Claude + Codex: read-only payment/audit APIs are merged into `main` as `783a1ed`; next is
+  the AG Grid console in `frontend/`. Neon verification remains pending because `DATABASE_URL` is
+  absent locally and the local key fingerprint does not match Sahil's shared-key fingerprint. The
+  stand-in attack dry-run also remains pending the Playwright Node driver memory issue.
 - Sahil + Claude: next is `request_payment(mandate_id, merchant_id, items=[{sku, quantity}])` with a
   shared server-side catalog and the demo stores (SoundHub :8101, MegaDeals :8102); then HTTP MCP
   transport + `list_mandates` / `get_payment_status`, Render deploy, Groq intent judge (`app/judge.py`).
@@ -135,8 +151,8 @@ Ask Sahil for the shared sandbox values.
 - [x] Anurag: hash-chained audit log + `/audit/verify` (merged into `main` as `88bf54c`).
 - [x] Both: agree on one shared `MANDATE_SIGNING_KEY` for the Neon database (shared by DM) and choose who runs migration `0002` (Sahil).
 - [x] Sahil: run migration `0002` and seed `m_demo` on Neon (Nov 3).
-- [ ] Anurag: add `DATABASE_URL` from Sahil to the ignored local `.env` and run the checker against
-      Neon; expect 5/5 checks before sync 1 (Nov 4).
+- [ ] Anurag: replace the local signing key with Sahil's shared key, add `DATABASE_URL` from Sahil to
+      the ignored local `.env`, and run the checker against Neon; expect 5/5 checks.
 - [ ] Sahil: run `uv run python -m scripts.check_setup` on your machine and on Render after deploy;
       the key fingerprint must match Anurag's.
 - [x] Sahil: orchestrator switch to `check_and_reserve` / `release_budget` / `append_audit`; payment row
@@ -166,6 +182,15 @@ Ask Sahil for the shared sandbox values.
       Nov 4).
 - [x] Anurag + Claude + Codex: review fixes for agent pages, per-cart errors, `check_setup`, MCP
       cleanup, and the race-test key fixture (pushed to `anurag`, merged into `main` as `8cfd974`).
+- [x] Anurag + Claude + Codex: add read-only `GET /payments`, `GET /payments/{id}`, `GET /audit`,
+      and `GET /audit/verify` APIs, `CORS_ORIGINS`, and backend Python 3.12 pin (`783a1ed`); 363
+      backend tests passed, 1 skipped, Ruff clean.
+- [ ] Both: sync 2, Nov 6 evening IST (attack blocked end to end on Neon).
+- [ ] Anurag: when Sahil's stores and items switch land, point the agent at `:8101` / `:8102`,
+      delete `agent/standin_stores/`, and remove the old-shape fallback in
+      `agent/leash_agent/leash.py`.
+- [ ] Sahil: write `risk_score` (string) and `judge` into the `payment.decided` audit payload when
+      the model and judge run; the console reads them from there.
 - [ ] Anurag: rerun `uv run python -m leash_agent attack --standin --dry-run` after the Playwright
       Node driver memory issue is resolved.
 - [ ] Anurag: point the attack agent at Sahil's real stores when available. Do not run `normal`
@@ -174,9 +199,19 @@ Ask Sahil for the shared sandbox values.
       `main` as `4abf400`; 24 new tests pass).
 - [ ] Sahil: call `build_features` and `score_anomaly` from the orchestrator; suggested STEP_UP at
       0.5, BLOCK at 0.9, and STEP_UP on error. Final thresholds by Nov 8.
-- [ ] Anurag (Nov 5–6): AG Grid audit console (needs `GET /audit` and `GET /payments`).
+- [ ] Anurag (Nov 5–6): AG Grid audit console in `frontend/` on top of the read routes.
 
 ## Log (newest first)
+
+### 2026-11-05 01:24 IST — Anurag + Claude + Codex
+- Added read-only payment and audit routes, CORS configuration, the backend Python 3.12 pin, contract
+  details, and README route instructions; commit `783a1ed` was pushed to `anurag` and fast-forwarded
+  into `main`.
+- Backend: 363 passed, 1 skipped; Ruff clean. Neon check is pending: local `.env` has no
+  `DATABASE_URL`, and its signing-key fingerprint is `3c914ba04924`, not the shared fingerprint
+  `cd628e356acd` supplied by Sahil. No secret values were added to the repo or changed locally.
+- Files: `.env.example`, `README.md`, `backend/.python-version`, `backend/app/{config,main,read_api}.py`,
+  `backend/tests/test_read_api.py`, `docs/CONTRACTS.md`, `CONTEXT.md`.
 
 ### 2026-11-05 00:29 IST — Anurag + Claude + Codex
 - Removed the stale attack-agent entry from In progress and left Sahil's anomaly-wiring task unticked
