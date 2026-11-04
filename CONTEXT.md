@@ -35,7 +35,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 | M0 | Oct 30–31 | Setup + 3 de-risking spikes | **Done** |
 | M1 | Oct 31–Nov 1 | Thin end-to-end flow + deploy: Claude pays $1 sandbox via hosted Leash | Local flow **done** (Claude Desktop paid $1 sandbox through the orchestrator); hosted deploy pending (Sahil, Render) |
 | M2 | Nov 2–3 | Mandates (Ed25519), policy engine, state machine, idempotency, saga, hash-chained audit | **Mostly done**: policy, signed mandates, budget holds, audit chain (Anurag); state machine, idempotency keys, void on capture failure (Sahil). Orchestrator switch to `check_and_reserve` / `release_budget` / `append_audit` and migration `0002` on Neon **done** (Nov 3). Budget lock proven on Neon under concurrency; saga reconcile added (Nov 4) |
-| M3 | Nov 4–5 | Attack demo: SoundHub + MegaDeals stores, LangGraph agent, injection blocked | Agent merged into `main` as `3be8391`; 45 agent tests pass; real-store integration pending |
+| M3 | Nov 4–5 | Attack demo: SoundHub + MegaDeals stores, LangGraph agent, injection blocked | Agent review fixes merged into `main` as `8cfd974`; 52 agent tests pass; real-store integration pending |
 | M4 | Nov 6–7 | Groq intent judge + XGBoost/SHAP anomaly model | Anomaly model merged into `main` as `4abf400`; 24 tests included in 354 passing backend tests; orchestrator wiring pending Sahil |
 | M5 | Nov 8 | Step-up approval via web page, survives restart | — |
 | M6 | Nov 9–10 | React frontend + AG Grid audit console. **Feature freeze Nov 10 23:59** | — |
@@ -91,6 +91,14 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
   The stand-in attack dry-run planned the gift-card injection and sent no payment. Merged into `main`
   as `3be8391`.
 
+- Review fixes are merged into `main` as `8cfd974`: inline-tag text stays together, JavaScript-rendered
+  products are awaited, carts report errors without aborting the run, MCP sessions close after setup
+  failures, duplicate pages are skipped, `check_setup` follows the newest migration, and the race test
+  uses the test key fixture. Backend tests pass (356 passed, 1 skipped); agent tests pass (52); Ruff
+  passes in both. The Postgres-only race test was skipped in this workspace. The supplied review report
+  records a temporary PostgreSQL 16 run, including 960 concurrent payments; that run was not repeated
+  here. The stand-in dry-run could not start because Playwright's Node driver ran out of memory.
+
 - Item 2 anomaly model is implemented and merged into `main` (`ac1f611`, merge `4abf400`): synthetic training data,
   XGBoost model, `score_anomaly` with up to three `pred_contribs` reasons, and `build_features` that
   excludes the current payment's hold. The model is not wired into the orchestrator; that is Sahil's
@@ -111,8 +119,8 @@ Ask Sahil for the shared sandbox values.
 - Anurag + Claude + Codex: the attack agent is merged into `main` as `3be8391`; its tests and Ruff pass. Neon setup verification is still pending until `DATABASE_URL` is added to the ignored local `.env`.
 - Sahil: wire `build_features` and `score_anomaly` into the allowed-payment path using a read-only
   session. Suggested thresholds: STEP_UP at 0.5 and BLOCK at 0.9; any scoring error -> STEP_UP.
-- Anurag + Claude + Codex: apply the review fixes on `anurag` for real-store page parsing/loading,
-  per-cart failure handling, setup-check migration detection, MCP cleanup, and the race-test key fixture.
+- Anurag + Claude + Codex: review fixes are merged into `main` as `8cfd974`; rerun the stand-in dry-run
+  after the Playwright Node driver memory issue is resolved. Neon setup verification is still pending.
 - Sahil + Claude: next is `request_payment(mandate_id, merchant_id, items=[{sku, quantity}])` with a
   shared server-side catalog and the demo stores (SoundHub :8101, MegaDeals :8102); then HTTP MCP
   transport + `list_mandates` / `get_payment_status`, Render deploy, Groq intent judge (`app/judge.py`).
@@ -159,6 +167,10 @@ Ask Sahil for the shared sandbox values.
 - [ ] Sahil: MCP `list_mandates` / `get_payment_status`.
 - [x] Anurag + Claude + Codex: merge the attack-agent commit from `anurag` directly into `main` (`3be8391`,
       Nov 4).
+- [x] Anurag + Claude + Codex: review fixes for agent pages, per-cart errors, `check_setup`, MCP
+      cleanup, and the race-test key fixture (pushed to `anurag`, merged into `main` as `8cfd974`).
+- [ ] Anurag: rerun `uv run python -m leash_agent attack --standin --dry-run` after the Playwright
+      Node driver memory issue is resolved.
 - [ ] Anurag: point the attack agent at Sahil's real stores when available. Do not run `normal`
       against Neon without Sahil.
 - [x] Anurag: implement synthetic data + XGBoost + SHAP anomaly scoring (`ac1f611`, merged into
@@ -168,6 +180,16 @@ Ask Sahil for the shared sandbox values.
 - [ ] Anurag (Nov 5–6): AG Grid audit console (needs `GET /audit` and `GET /payments`).
 
 ## Log (newest first)
+
+### 2026-11-05 00:24 IST — Anurag + Claude + Codex
+- Pushed review-fix commit `8cfd974` to `origin/anurag` and fast-forwarded it into `main`.
+- Backend tests: 356 passed, 1 skipped; agent tests: 52 passed; Ruff clean in both. The Postgres-only
+  race test was skipped locally. The attached report records PostgreSQL 16 migration and concurrency
+  checks, but those were not rerun in this workspace.
+- `attack --standin --dry-run` did not start: Playwright's Node driver ran out of memory before the
+  browser opened; no payment was sent. The code merge is complete, but that demo check remains pending.
+- Files: `agent/leash_agent/{__main__,graph,leash,pages}.py`, `agent/tests/*`,
+  `backend/scripts/check_setup.py`, `backend/tests/{test_check_setup,test_mandates}.py`, `CONTEXT.md`.
 
 ### 2026-11-05 00:16 IST — Anurag + Claude + Codex
 - Claimed the review fixes for agent store-page reliability, cart error handling, setup-check migration
