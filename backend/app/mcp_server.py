@@ -26,8 +26,8 @@ async def request_payment(mandate_id: str, merchant_id: str, items: list[dict]) 
     """Ask Leash to pay a store under a mandate for `items`, e.g. [{"sku": "sh-sony-xm5",
     "quantity": 1}]. Send no price or amount: Leash prices each sku from its own catalog.
 
-    Leash checks the cart and the mandate, then pays only on ALLOW. Returns the decision with its
-    reasons.
+    Leash checks the cart, the mandate and the payment's risk, then pays only on ALLOW. STEP_UP
+    means a person must approve first. Returns the decision with its reasons.
     """
     try:
         sessions = get_sessionmaker()

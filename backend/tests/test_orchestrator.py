@@ -6,7 +6,8 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app import db, mandates, mcp_server, orchestrator
+from app import anomaly, db, mandates, mcp_server, orchestrator
+from app.anomaly import AnomalyResult
 from app.audit import verify_chain
 from app.catalog import DEFAULT_CATALOG_PATH, load_catalog
 from app.config import Settings
@@ -21,6 +22,21 @@ S = PaymentStatus
 NOW = datetime(2026, 11, 4, 12, 0, tzinfo=UTC)
 KEY_B64 = generate_signing_key()
 SONY = {"sku": "sh-sony-xm5", "quantity": 1}  # $179.00 at SoundHub
+
+
+class FakeModel:
+    """Stands in for score_anomaly; records the features it was given."""
+
+    def __init__(self, score=0.05, error=None):
+        self.score = score
+        self.error = error
+        self.features = []
+
+    def __call__(self, features):
+        self.features.append(features)
+        if self.error:
+            raise self.error
+        return AnomalyResult(score=self.score, reasons=("amount $179.00",), model_version="test-v1")
 
 
 class FakePayPal:
@@ -52,9 +68,16 @@ class FakePayPal:
 async def sessions(sessions, monkeypatch):
     # The shared SQLite database from conftest.py, with a signing key and m_demo seeded as on Neon.
     settings = Settings(
-        mandate_signing_key=KEY_B64, velocity_max_payments=3, velocity_window_seconds=600
+        mandate_signing_key=KEY_B64,
+        velocity_max_payments=3,
+        velocity_window_seconds=600,
+        anomaly_step_up_threshold=0.5,
+        anomaly_block_threshold=0.9,
     )
     monkeypatch.setattr(mandates, "get_settings", lambda: settings)
+    monkeypatch.setattr(orchestrator, "get_settings", lambda: settings)
+    # A low risk score unless a test says otherwise; one test below uses the real model.
+    monkeypatch.setattr(orchestrator, "score_anomaly", FakeModel())
     # The shipped catalog, whatever CATALOG_PATH the local .env sets.
     catalog = load_catalog(DEFAULT_CATALOG_PATH)
     monkeypatch.setattr(orchestrator, "get_catalog", lambda: catalog)
@@ -109,13 +132,14 @@ async def test_allow_authorizes_then_captures_with_vault_and_idempotency_key(ses
     result = await _pay(sessions, paypal)
 
     assert result["decision"] == "ALLOW" and result["reasons"] == []
-    assert result["status"] == S.CAPTURED
+    assert result["status"] == S.CAPTURED and result["risk_score"] == "0.050000"
     (payment,), events = await _rows(sessions)
     assert payment.id == result["payment_id"]
     assert payment.status == S.CAPTURED and payment.decision == "ALLOW"
     assert payment.paypal_order_id == "O-1" and payment.paypal_authorization_id == "A-1"
     assert json.loads(payment.items) == [SONY | {"unit_price": "179.00"}]
     assert [e.event_type for e in events] == [
+        "payment.decided",
         "payment.decided",
         "payment.authorized",
         "payment.captured",
@@ -138,12 +162,14 @@ async def test_allow_authorizes_then_captures_with_vault_and_idempotency_key(ses
     assert await _chain_ok(sessions)
 
 
-async def test_policy_block_never_calls_paypal(sessions):
-    paypal = FakePayPal()
+async def test_policy_block_never_calls_paypal_or_the_model(sessions, monkeypatch):
+    paypal, model = FakePayPal(), FakeModel()
+    monkeypatch.setattr(orchestrator, "score_anomaly", model)
     two_sony = [{"sku": "md-sony-xm5", "quantity": 2}]  # $298.00
     result = await _pay(sessions, paypal, merchant_id="megadeals", items=two_sony)
 
     assert result["decision"] == "BLOCK" and result["status"] == S.BLOCKED
+    assert result["risk_score"] is None and model.features == []
     assert _codes(result) == ["merchant_not_allowed", "amount_exceeds_max_payment_amount"]
     assert paypal.calls == []
     (payment,), events = await _rows(sessions)
@@ -218,6 +244,7 @@ async def test_cart_leash_cannot_price_is_blocked_and_recorded(
     result = await _pay(sessions, paypal, merchant_id=merchant_id, items=items)
 
     assert result["decision"] == "BLOCK" and result["status"] == S.BLOCKED
+    assert result["risk_score"] is None
     assert _codes(result) == codes
     assert paypal.calls == []
     (payment,), events = await _rows(sessions)
@@ -270,6 +297,117 @@ async def test_catalog_error_blocks_without_saving(sessions, monkeypatch):
     assert await _rows(sessions) == ([], [])
 
 
+@pytest.mark.parametrize(
+    ("model", "decision", "status", "codes", "last_event"),
+    [
+        (FakeModel(0.4999), "ALLOW", S.CAPTURED, [], "payment.captured"),
+        (FakeModel(0.5), "STEP_UP", S.AWAITING_APPROVAL, ["anomaly_step_up"], "approval.requested"),
+        (
+            FakeModel(0.8999),
+            "STEP_UP",
+            S.AWAITING_APPROVAL,
+            ["anomaly_step_up"],
+            "approval.requested",
+        ),
+        (FakeModel(0.9), "BLOCK", S.BLOCKED, ["anomaly_block"], "payment.blocked"),
+        (FakeModel(1.0), "BLOCK", S.BLOCKED, ["anomaly_block"], "payment.blocked"),
+        (
+            FakeModel(error=ValueError("bad features")),
+            "STEP_UP",
+            S.AWAITING_APPROVAL,
+            ["anomaly_check_failed"],
+            "approval.requested",
+        ),
+        (
+            FakeModel(float("nan")),
+            "STEP_UP",
+            S.AWAITING_APPROVAL,
+            ["anomaly_check_failed"],
+            "approval.requested",
+        ),
+    ],
+)
+async def test_risk_score_can_only_make_an_allowed_payment_stricter(
+    sessions, monkeypatch, model, decision, status, codes, last_event
+):
+    model.features.clear()
+    monkeypatch.setattr(orchestrator, "score_anomaly", model)
+    paypal = FakePayPal()
+    result = await _pay(sessions, paypal)
+
+    assert (result["decision"], result["status"], _codes(result)) == (decision, status, codes)
+    (payment,), events = await _rows(sessions)
+    assert (payment.decision, payment.status, payment.reasons) == (
+        decision,
+        status,
+        result["reasons"],
+    )
+    # Features exclude this payment's own hold: m_demo had nothing before it.
+    (features,) = model.features
+    assert (features.amount, features.payment_count, features.budget_used_ratio) == (
+        Decimal("179.00"),
+        0,
+        0.0,
+    )
+
+    t1, t2 = events[:2]
+    assert t1.event_type == t2.event_type == "payment.decided"
+    assert t1.payload["decision"] == "ALLOW"
+    if model.error or model.score != model.score:  # raised, or NaN
+        assert result["risk_score"] is None
+        assert t2.payload == {
+            "decision": "STEP_UP",
+            "reasons": result["reasons"],
+            "risk_score": None,
+            "anomaly_reasons": [],
+            "model_version": None,
+        }
+    else:
+        assert result["risk_score"] == f"{model.score:.6f}"
+        assert t2.payload == {
+            "decision": decision,
+            "reasons": result["reasons"],
+            "risk_score": f"{model.score:.6f}",
+            "anomaly_reasons": ["amount $179.00"],
+            "model_version": "test-v1",
+        }
+    assert events[-1].event_type == last_event
+
+    budget_used, count, (hold,) = await _usage(sessions)
+    if decision == "BLOCK":
+        assert (budget_used, count) == (Decimal("0.00"), 0) and hold.released_at is not None
+    else:
+        assert (budget_used, count) == (Decimal("179.00"), 1) and hold.released_at is None
+    assert [c[0] for c in paypal.calls] == (["authorize", "capture"] if decision == "ALLOW" else [])
+    assert await _chain_ok(sessions)
+
+
+async def test_feature_read_error_steps_up(sessions, monkeypatch):
+    async def broken(session, **kwargs):
+        raise LookupError("mandate 'm_demo' not found")
+
+    monkeypatch.setattr(orchestrator, "build_features", broken)
+    paypal = FakePayPal()
+    result = await _pay(sessions, paypal)
+
+    assert result["decision"] == "STEP_UP" and result["status"] == S.AWAITING_APPROVAL
+    assert _codes(result) == ["anomaly_check_failed"] and paypal.calls == []
+    assert (await _usage(sessions))[:2] == (Decimal("179.00"), 1)
+    assert await _chain_ok(sessions)
+
+
+async def test_real_model_allows_the_normal_soundhub_purchase(sessions, monkeypatch):
+    monkeypatch.setattr(orchestrator, "score_anomaly", anomaly.score_anomaly)
+    # 12:00 UTC. The model scores this same purchase >= 0.5 from 19:00 to 01:59 UTC.
+    result = await _pay(sessions, FakePayPal())
+
+    assert result["decision"] == "ALLOW" and result["status"] == S.CAPTURED
+    assert float(result["risk_score"]) < 0.1
+    _, events = await _rows(sessions)
+    assert events[1].payload["model_version"].startswith("synthetic-")
+    assert await _chain_ok(sessions)
+
+
 async def test_budget_uses_the_mandate_holds(sessions):
     for minutes in (30, 20):
         paid = await _pay(sessions, FakePayPal(), now=NOW - timedelta(minutes=minutes))
@@ -312,7 +450,11 @@ async def test_authorize_error_marks_failed_and_blocks(sessions):
     assert [c[0] for c in paypal.calls] == ["authorize"]
     (payment,), events = await _rows(sessions)
     assert payment.status == S.FAILED and payment.decision == "BLOCK"
-    assert [e.event_type for e in events] == ["payment.decided", "payment.failed"]
+    assert [e.event_type for e in events] == [
+        "payment.decided",
+        "payment.decided",
+        "payment.failed",
+    ]
     budget_used, count, (hold,) = await _usage(sessions)
     assert (budget_used, count) == (Decimal("0.00"), 0) and hold.released_at is not None
     assert await _chain_ok(sessions)
@@ -337,6 +479,7 @@ async def test_capture_failure_voids_the_hold_and_blocks(sessions, capture_statu
     (payment,), events = await _rows(sessions)
     assert paypal.calls[-1] == ("void", "A-1", f"{payment.idempotency_key}-void")
     assert [e.event_type for e in events] == [
+        "payment.decided",
         "payment.decided",
         "payment.authorized",
         "payment.voided",
@@ -373,10 +516,10 @@ async def test_audit_verify_endpoint_passes_after_payments(sessions):
 
     app.dependency_overrides[db.get_session] = session_override
     try:
-        # Two mandate.created, three events for the ALLOW, two for the BLOCK.
+        # Two mandate.created, four events for the ALLOW, two for the BLOCK.
         assert TestClient(app).get("/audit/verify").json() == {
             "ok": True,
-            "checked": 7,
+            "checked": 8,
             "first_bad_id": None,
         }
     finally:

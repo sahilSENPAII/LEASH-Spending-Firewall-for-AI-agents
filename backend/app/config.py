@@ -3,6 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -24,6 +25,9 @@ class Settings(BaseSettings):
     mandate_signing_key: str = ""
     velocity_max_payments: int = 3
     velocity_window_seconds: int = 600
+    # Anomaly score cut-offs after a policy ALLOW (CONTRACTS 5.2); final values agreed Nov 8.
+    anomaly_step_up_threshold: float = Field(default=0.5, ge=0, le=1)
+    anomaly_block_threshold: float = Field(default=0.9, ge=0, le=1)
     # Product catalog file, relative to the repo root; empty means stores/catalog.json.
     catalog_path: str = ""
     # Comma-separated origins allowed to call the API from a browser (the audit console).
