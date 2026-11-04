@@ -101,6 +101,7 @@ Ask Sahil for the shared sandbox values.
 
 ## In progress
 - Anurag + Codex: the attack agent is merged into `main` as `3be8391`; its tests and Ruff pass. Neon setup verification is still pending until `DATABASE_URL` is added to the ignored local `.env`.
+- Anurag + Codex: item 2 anomaly model on `anurag` — synthetic payment data, deterministic XGBoost model, `score_anomaly`, and `build_features`; orchestrator integration remains with Sahil.
 - Sahil + Claude: next is `request_payment(mandate_id, merchant_id, items=[{sku, quantity}])` with a
   shared server-side catalog and the demo stores (SoundHub :8101, MegaDeals :8102); then HTTP MCP
   transport + `list_mandates` / `get_payment_status`, Render deploy, Groq intent judge (`app/judge.py`).
@@ -147,10 +148,18 @@ Ask Sahil for the shared sandbox values.
 - [ ] Sahil: MCP `list_mandates` / `get_payment_status`.
 - [x] Anurag + Codex: merge the attack-agent commit from `anurag` directly into `main` (`3be8391`,
       Nov 4).
-- [ ] Anurag: point the agent at Sahil's real stores when available, then continue the anomaly-model
-      synthetic data generator. Do not run `normal` against Neon without Sahil.
+- [ ] Anurag: point the attack agent at Sahil's real stores when available. Do not run `normal`
+      against Neon without Sahil.
+- [ ] Sahil: call `build_features` and `score_anomaly` from the orchestrator after the anomaly model
+      lands; agree on STEP_UP / BLOCK thresholds.
+- [ ] Anurag (Nov 5–6): AG Grid audit console (needs `GET /audit` and `GET /payments`).
 
 ## Log (newest first)
+
+### 2026-11-04 23:37 IST — Anurag + Codex
+- Claimed anomaly-model item 2 on `anurag`: synthetic data, XGBoost model, anomaly scoring and
+  database feature building. The scorer is not yet wired into the orchestrator.
+- Files: `CONTEXT.md`.
 
 ### 2026-11-04 23:28 IST — Anurag + Codex
 - Merged `anurag` directly into `main` as merge commit `3be8391` (agent commit `5372fa2`), per request.
