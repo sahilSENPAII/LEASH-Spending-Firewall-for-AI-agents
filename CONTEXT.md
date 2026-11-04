@@ -239,6 +239,12 @@ Ask Sahil for the shared sandbox values.
       Note: `m_demo` now has $320 / 3 payments left after Sahil's hosted buy.
 - [ ] Sahil (minor): `list_mandates` should hide revoked/expired mandates (or sort active first) and
       return `"currency": "USD"`; Claude Desktop listed the two old `m_pgtest_*` mandates.
+- [ ] Sahil (M7 demo): when the cart check fails, still run `evaluate_payment` and merge both reason
+      lists, so the attack shows every reason (wrong store, over the limit, mixed categories).
+- [ ] Sahil (minor): add `stores/test_serve.py` (6 tests) to CI.
+- [x] Sahil: set `OPENBLAS_NUM_THREADS=1` and `OMP_NUM_THREADS=1` on Render (free tier is 512 MB).
+- [x] Both: one Vite + React app in `frontend/` (Anurag's AG Grid console + Sahil's mandate and
+      approvals pages); API base URL from `VITE_API_URL`.
 
 ## Log (newest first)
 
