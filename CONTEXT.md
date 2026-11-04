@@ -106,9 +106,11 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1â
   `Authorization: Bearer ...`; stdio mode is unchanged. The supplied handoff reports a local-Postgres
   rehearsal with the real backend and stores: attack BLOCKED (`mixed_categories`) and
   `/audit/verify` OK. It reports 487 backend tests passed (1 skipped) and 53 agent tests passed.
-  The supplied report says `test_e2e_backend.py` passes in another checkout (~5s); it stalled in the
-  Codex workspace. `McpLeash` now limits startup to 60s (`df7a1af`). Here, 53 agent tests pass with
-  that E2E test excluded; the full-suite E2E check in Anurag's PowerShell remains pending.
+  `McpLeash` limits startup to 60s (`df7a1af`). The Windows stdio issue is fixed (`1a182ad`): the
+  faulthandler dump showed `score_anomaly` blocked during NumPy's native import inside
+  `request_payment`; BLOCKED carts skip scoring. NumPy and XGBoost now load at module import, before
+  MCP reads stdin. Backend: 488 passed, 1 skipped; agent: 54 passed. Windows E2E passed in 8.13s:
+  injected cart BLOCKED, normal cart ALLOWED. It uses the local SQLite/fake-PayPal harness.
 - The agent end-to-end test accepts `merchant_not_allowed` or `mixed_categories` while still requiring
   `BLOCK` and `BLOCKED`.
 
@@ -147,10 +149,10 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1â
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Claude + Codex: bearer-token support (`14c0bab`) and the MCP startup timeout (`df7a1af`)
-  are merged. The affected `test_leash.py` module passes (11); 53 agent tests pass with
-  `test_e2e_backend.py` excluded, and Ruff is clean. The full agent E2E run in Codex still stalls;
-  verify it in Anurag's PowerShell. Next planned work is the AG Grid console in `frontend/`.
+- Anurag + Claude + Codex: bearer-token support (`14c0bab`), the MCP startup timeout (`df7a1af`),
+  and the Windows native-import fix (`1a182ad`) are merged. Backend 488 passed (1 skipped); agent 54
+  passed; Ruff is clean. The Windows E2E passes in 8.13s using local SQLite and fake PayPal. Next
+  planned work is the AG Grid console in `frontend/`.
 - Sahil + Claude: Render deploy of the backend with hosted MCP at `/mcp` (token `MCP_AUTH_TOKEN`), then
   the hosted $1 test (sync 1); then Groq intent judge (`app/judge.py`) and step-up approvals (M5).
 
@@ -207,8 +209,10 @@ Ask Sahil for the shared sandbox values.
       `/mcp`; stdio remains unchanged (`14c0bab`).
 - [x] Anurag + Claude + Codex: stop startup from waiting forever when Leash does not answer; fail
       after 60s with a clear error (`df7a1af`).
-- [ ] Anurag: run the full agent suite in local PowerShell; the Codex run stalls at
-      `test_e2e_backend.py`. Record whether it passes or the captured error.
+- [x] Anurag + Claude + Codex: run the full agent suite on Windows (54 passed); E2E BLOCK then ALLOW
+      passed in 8.13s using the local SQLite/fake-PayPal harness (`1a182ad`).
+- [ ] Sahil: load native libraries (including judge dependencies) at module startup, not for the first
+      time inside an MCP tool call; the Windows faulthandler dump showed the NumPy import blocking.
 - [ ] Sahil: after Render deploy, share `MCP_AUTH_TOKEN` by DM; Anurag sets
       `AGENT_LEASH_URL=https://<service>.onrender.com/mcp` and `AGENT_LEASH_TOKEN`, then runs `attack`.
 - [ ] Sahil: write `risk_score` (string) and `judge` into the `payment.decided` audit payload when
@@ -226,6 +230,18 @@ Ask Sahil for the shared sandbox values.
 - [ ] Anurag (Nov 5â€“6): AG Grid audit console in `frontend/` on top of the read routes.
 
 ## Log (newest first)
+
+### 2026-11-05 04:20 IST â€” Anurag + Claude + Codex
+- Moved NumPy and XGBoost imports to `backend/app/anomaly.py` module scope so the stdio server loads
+  native libraries before reading messages (`1a182ad`). The dump showed the first NumPy import
+  stalled in `score_anomaly` during an allowed `request_payment`; blocked carts never reach scoring.
+- Backend: 488 passed, 1 skipped; agent: 54 passed; Ruff clean in both. The Windows E2E passed in
+  8.13s (attack BLOCK, normal ALLOW) using a local SQLite database and fake PayPal. It did not touch
+  Neon. The import test fails without the change (`False False`) and passes with it.
+- The import test caps OpenBLAS/OMP threads in its child process to avoid an OpenBLAS allocation
+  failure in the test runner. No production thread settings were changed.
+- Pushed `1a182ad` to `anurag` and fast-forwarded it into `main`.
+- Files: `backend/app/anomaly.py`, `backend/tests/test_anomaly.py`, `CONTEXT.md`.
 
 ### 2026-11-05 03:37 IST â€” Anurag + Claude + Codex
 - Added a 60s MCP startup timeout and a silent-server regression test (`df7a1af`). It raises a clear
