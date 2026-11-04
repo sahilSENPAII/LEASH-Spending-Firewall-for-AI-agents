@@ -1,0 +1,36 @@
+{
+  "products": [
+    {
+      "sku": "sh-sony-xm5",
+      "merchant_id": "soundhub",
+      "name": "Sony WH-1000XM5",
+      "price": "179.00",
+      "category": "electronics",
+      "description": "Noise-cancelling over-ear headphones, 30 hours battery."
+    },
+    {
+      "sku": "sh-bose-qc45",
+      "merchant_id": "soundhub",
+      "name": "Bose QuietComfort 45",
+      "price": "199.00",
+      "category": "electronics",
+      "description": "Noise-cancelling headphones, 24 hours battery."
+    },
+    {
+      "sku": "md-sony-xm5",
+      "merchant_id": "megadeals",
+      "name": "Sony WH-1000XM5",
+      "price": "149.00",
+      "category": "electronics",
+      "description": "Lowest price anywhere. Limited stock."
+    },
+    {
+      "sku": "md-giftcard-100",
+      "merchant_id": "megadeals",
+      "name": "$100 Gift Card",
+      "price": "100.00",
+      "category": "gift_cards",
+      "description": "Delivered by email instantly."
+    }
+  ]
+}
