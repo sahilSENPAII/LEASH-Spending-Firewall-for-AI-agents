@@ -95,6 +95,9 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
   agent's stand-in pages; anomaly wiring follows the items switch (STEP_UP >= 0.5, BLOCK >= 0.9,
   final thresholds by Nov 8); sync 2 is Nov 6 evening IST. `attack` on Neon is allowed; run `normal`
   only with Sahil.
+- Sahil's `origin/sahil` branch now contains shared-catalog pricing and SoundHub/MegaDeals store files.
+  The agent end-to-end test accepts `merchant_not_allowed` or `mixed_categories` while still requiring
+  `BLOCK` and `BLOCKED`; this lets either the old policy path or Sahil's earlier cart check pass.
 
 - LangGraph attack agent is implemented in `agent/` and pushed to `anurag` as `5372fa2`. It uses
   Playwright, scripted or Groq planning, stand-in stores, and Leash's MCP payment tool; D14 records
@@ -131,11 +134,12 @@ Ask Sahil for the shared sandbox values.
 ## In progress
 - Anurag + Claude + Codex: read-only payment/audit APIs are merged into `main` as `783a1ed`; Neon
   check passed 5/5 on Anurag's machine with shared-key fingerprint `cd628e356acd`. Next is the AG Grid
-  console in `frontend/`. The scripted stand-in attack against Neon was BLOCKED; `/payments` showed
+  console in `frontend/`. The end-to-end test compatibility fix is merged as `6d05bfd`; 52 agent tests
+  pass and Ruff is clean. The scripted stand-in attack against Neon was BLOCKED; `/payments` showed
   the $449.00 blocked cart and `/audit/verify` confirmed 12 valid entries.
-- Sahil + Claude: next is `request_payment(mandate_id, merchant_id, items=[{sku, quantity}])` with a
-  shared server-side catalog and the demo stores (SoundHub :8101, MegaDeals :8102); then HTTP MCP
-  transport + `list_mandates` / `get_payment_status`, Render deploy, Groq intent judge (`app/judge.py`).
+- Sahil + Claude: shared-catalog pricing, items-based `request_payment`, and demo stores are on
+  `sahil` but not yet merged; then HTTP MCP transport + `list_mandates` / `get_payment_status`, Render
+  deploy, and Groq intent judge (`app/judge.py`).
 
 ## Next up
 - [x] Sahil: Python 3.12 via uv; Neon project `leash` (AWS us-east-1), `DATABASE_URL` in `.env`.
@@ -157,8 +161,8 @@ Ask Sahil for the shared sandbox values.
 - [x] Sahil: orchestrator switch to `check_and_reserve` / `release_budget` / `append_audit`; payment row
       flushed first, mandate-before-audit lock order, UTC `now`, no floats, `DEMO_MANDATE` and
       `_usage()` removed (merged to `main` as `31dcdfb`, Nov 3).
-- [ ] Sahil: `request_payment(mandate_id, merchant_id, items=[{sku, quantity}])` with a shared catalog
-      (Leash computes the amount) + demo stores.
+- [ ] Sahil: merge the items-based `request_payment`, shared catalog, and demo stores from `sahil` into
+      `main`; if `backend/app/config.py` conflicts, keep both `CORS_ORIGINS` and `CATALOG_PATH`.
 - [ ] Sahil (minor): fix the three `0001` nullable mismatches.
 - [x] Sahil: Postgres concurrency test for `check_and_reserve` (passed on Neon) and saga reconcile
       (`app/reconcile.py`, `scripts/reconcile_payments.py`), merged to `main` as `24dbb07` (Nov 4).
@@ -192,8 +196,9 @@ Ask Sahil for the shared sandbox values.
       the model and judge run; the console reads them from there.
 - [x] Anurag: run `uv run python -m leash_agent attack --standin` against Neon; Leash BLOCKED the
       injected cart, `/payments` showed it, and `/audit/verify` returned 12 valid entries (Nov 5).
-- [ ] Anurag: point the attack agent at Sahil's real stores when available. Do not run `normal`
-      against Neon without Sahil.
+- [ ] Anurag (after Sahil's merge): point the agent at `:8101` / `:8102`, delete
+      `agent/standin_stores/`, and remove the old-shape fallback in `agent/leash_agent/leash.py`.
+      Do not run `normal` against Neon without Sahil.
 - [x] Anurag: implement synthetic data + XGBoost + SHAP anomaly scoring (`ac1f611`, merged into
       `main` as `4abf400`; 24 new tests pass).
 - [ ] Sahil: call `build_features` and `score_anomaly` from the orchestrator; suggested STEP_UP at
@@ -201,6 +206,14 @@ Ask Sahil for the shared sandbox values.
 - [ ] Anurag (Nov 5–6): AG Grid audit console in `frontend/` on top of the read routes.
 
 ## Log (newest first)
+
+### 2026-11-05 01:54 IST — Anurag + Claude + Codex
+- Updated the agent backend end-to-end assertion to accept `merchant_not_allowed` or
+  `mixed_categories`, while retaining the BLOCK decision and BLOCKED status checks. Commit `6d05bfd`
+  was pushed to `anurag` and fast-forwarded into `main`.
+- Agent: 52 passed; `uv run ruff check leash_agent tests` passed. Sahil's catalog/store changes remain
+  on `origin/sahil`; preserve both `CORS_ORIGINS` and `CATALOG_PATH` if the config merge conflicts.
+- Files: `agent/tests/test_e2e_backend.py`, `CONTEXT.md`.
 
 ### 2026-11-05 01:40 IST — Anurag + Claude + Codex
 - Installed Playwright Chromium and ran the scripted stand-in attack against Neon. Leash BLOCKED the
