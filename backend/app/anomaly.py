@@ -16,6 +16,10 @@ from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 
+# The Nov 5 Windows dump stopped in NumPy's native import during a tool call. Load native libraries
+# before the stdio server starts reading messages.
+import numpy
+import xgboost
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -101,8 +105,6 @@ def feature_row(f: AnomalyFeatures) -> list[float]:
 @lru_cache(maxsize=2)
 def load_model(path: str = str(MODEL_PATH)):
     """The trained booster, loaded once. Raises if the file is missing or unreadable."""
-    import xgboost
-
     booster = xgboost.Booster()
     booster.load_model(path)
     if tuple((booster.attr("features") or "").split(",")) != FEATURES:
@@ -112,9 +114,6 @@ def load_model(path: str = str(MODEL_PATH)):
 
 def score_anomaly(features: AnomalyFeatures, *, model_path: Path = MODEL_PATH) -> AnomalyResult:
     """Score one payment. Raises on bad input or a missing model; the caller then uses STEP_UP."""
-    import numpy
-    import xgboost
-
     row = feature_row(features)
     booster = load_model(str(model_path))
     matrix = xgboost.DMatrix(numpy.array([row], dtype=float), missing=math.nan,

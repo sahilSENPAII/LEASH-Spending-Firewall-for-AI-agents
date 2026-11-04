@@ -1,7 +1,11 @@
 import math
+import os
+import subprocess
+import sys
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 
 import numpy
 import pytest
@@ -256,6 +260,22 @@ async def test_features_for_an_unknown_mandate_raise(sessions):
         with pytest.raises(LookupError):
             await build_features(s, payment_id="p", mandate_id="nope", merchant_id="soundhub",
                                  amount=Decimal("1"), now=NOW, window_seconds=600)
+
+
+def test_server_loads_numpy_and_xgboost_before_reading_stdin():
+    # The Nov 5 Windows dump stopped in NumPy's native import during an MCP tool call. Check that
+    # importing the MCP server loads both libraries in a fresh process.
+    code = "import sys, app.mcp_server; print('numpy' in sys.modules, 'xgboost' in sys.modules)"
+    out = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=Path(__file__).parents[1],
+        env={**os.environ, "OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1"},
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=True,
+    )
+    assert out.stdout.split() == ["True", "True"]
 
 
 def test_model_file_is_next_to_the_code():
