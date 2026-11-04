@@ -35,7 +35,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 | M0 | Oct 30–31 | Setup + 3 de-risking spikes | **Done** |
 | M1 | Oct 31–Nov 1 | Thin end-to-end flow + deploy: Claude pays $1 sandbox via hosted Leash | Local flow **done** (Claude Desktop paid $1 sandbox through the orchestrator); hosted deploy pending (Sahil, Render) |
 | M2 | Nov 2–3 | Mandates (Ed25519), policy engine, state machine, idempotency, saga, hash-chained audit | **Mostly done**: policy, signed mandates, budget holds, audit chain (Anurag); state machine, idempotency keys, void on capture failure (Sahil). Orchestrator switch to `check_and_reserve` / `release_budget` / `append_audit` and migration `0002` on Neon **done** (Nov 3). Budget lock proven on Neon under concurrency; saga reconcile added (Nov 4) |
-| M3 | Nov 4–5 | Attack demo: SoundHub + MegaDeals stores, LangGraph agent, injection blocked | Agent review fixes merged into `main` as `8cfd974`; 52 agent tests pass; real-store integration pending |
+| M3 | Nov 4–5 | Attack demo: SoundHub + MegaDeals stores, LangGraph agent, injection blocked | Real-store agent integration merged into `main` as `aaf269b`; agent sends SKU/quantity only; 50 agent tests pass. |
 | M4 | Nov 6–7 | Groq intent judge + XGBoost/SHAP anomaly model | Anomaly model merged into `main` as `4abf400`; 24 tests included in 354 passing backend tests; orchestrator wiring pending Sahil |
 | M5 | Nov 8 | Step-up approval via web page, survives restart | — |
 | M6 | Nov 9–10 | React frontend + AG Grid audit console. **Feature freeze Nov 10 23:59** | — |
@@ -98,6 +98,10 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 - Sahil's shared catalog, items-based `request_payment`, and SoundHub/MegaDeals stores were merged to
   `main` in `b8690bb`; `backend/app/config.py` retains both `catalog_path` and `cors_origins`. His
   anomaly-wiring commit `820d249` remains only on `origin/sahil`.
+- The agent now sends only `items=[{sku, quantity}]` to Leash; its old `amount` fallback is removed.
+  The README demo uses Sahil's real stores; `agent/standin_stores/` remains for tests and offline runs.
+  The supplied real-store demo report says the attack is BLOCKED (`mixed_categories`). Agent tests
+  pass (50); backend tests remain at the prior result (464 passed, 1 skipped).
 - The agent end-to-end test accepts `merchant_not_allowed` or `mixed_categories` while still requiring
   `BLOCK` and `BLOCKED`.
 
@@ -135,10 +139,9 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Claude + Codex: anomaly model v2 (`8cf1f50`) and the clock-pinned end-to-end test are merged;
-  backend 464 passed, 1 skipped, agent 52 passed, Ruff clean. Neon check passed 5/5 with shared-key
-  fingerprint `cd628e356acd`; the scripted attack was BLOCKED and the audit chain verified. Next is the
-  AG Grid console in `frontend/`.
+- Anurag + Claude + Codex: real-store agent follow-up (`aaf269b`) is merged; 50 agent tests pass and
+  Ruff is clean. The supplied demo report records BLOCK (`mixed_categories`); the live Neon demo was
+  not rerun in this task. Next planned work is the AG Grid console in `frontend/`.
 - Sahil + Claude: catalog, stores, and items-based payments are merged (`b8690bb`). Anomaly wiring
   (`820d249`) remains on `sahil`; the model-v2 prerequisite is now on `main`. Then HTTP MCP transport,
   `list_mandates` / `get_payment_status`, Render deploy, and Groq intent judge (`app/judge.py`).
@@ -189,8 +192,8 @@ Ask Sahil for the shared sandbox values.
       and `GET /audit/verify` APIs, `CORS_ORIGINS`, and backend Python 3.12 pin (`783a1ed`); 363
       backend tests passed, 1 skipped, Ruff clean.
 - [ ] Both: sync 2, Nov 6 evening IST (attack blocked end to end on Neon).
-- [ ] Anurag: point the agent at `:8101` / `:8102`, delete `agent/standin_stores/`, and remove the
-      old-shape fallback in `agent/leash_agent/leash.py` for real-store demos.
+- [x] Anurag + Claude + Codex: remove the old `amount` fallback; use Sahil's real stores for demos
+      while keeping `agent/standin_stores/` for tests/offline runs (`aaf269b`).
 - [ ] Sahil: write `risk_score` (string) and `judge` into the `payment.decided` audit payload when
       the model and judge run; the console reads them from there.
 - [x] Anurag: run `uv run python -m leash_agent attack --standin` against Neon; Leash BLOCKED the
@@ -202,6 +205,15 @@ Ask Sahil for the shared sandbox values.
 - [ ] Anurag (Nov 5–6): AG Grid audit console in `frontend/` on top of the read routes.
 
 ## Log (newest first)
+
+### 2026-11-05 02:54 IST — Anurag + Claude + Codex
+- Removed the agent's old `amount` fallback; it now sends only SKU and quantity. Updated the README
+  demo to use Sahil's real stores. The code commit `aaf269b` was pushed to `anurag` and fast-forwarded
+  into `main`.
+- Agent tests: 50 passed; `uv run ruff check leash_agent tests` passed. The live Neon demo was not
+  rerun because it writes a payment record; the supplied run report records BLOCK (`mixed_categories`).
+- Files: `README.md`, `agent/leash_agent/{graph,leash}.py`, `agent/standin_stores/README.md`,
+  `agent/tests/{stub_leash_server,test_leash}.py`, `docs/DECISIONS.md`, `CONTEXT.md`.
 
 ### 2026-11-05 02:32 IST — Anurag + Claude + Codex
 - Updated the synthetic anomaly data and committed model as v2 (`8cf1f50`); fixed the agent backend
