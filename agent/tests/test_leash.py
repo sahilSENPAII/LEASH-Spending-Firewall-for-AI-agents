@@ -96,3 +96,29 @@ async def test_dry_run_sends_nothing_and_says_so():
         result = await leash.request_payment("m_demo", "megadeals", ITEMS)
     assert result["decision"] == "NOT SENT"
     assert leash.calls == [("m_demo", "megadeals", ITEMS)]
+
+
+async def test_failed_setup_still_closes_the_mcp_session(monkeypatch):
+    closed = []
+
+    class SpySession:
+        async def __aenter__(self):
+            return object()
+
+        async def __aexit__(self, *exc):
+            closed.append(exc)
+
+    class SpyClient:
+        def session(self, name):
+            return SpySession()
+
+    async def broken_load(session):
+        raise ConnectionError("server died while listing tools")
+
+    monkeypatch.setattr("leash_agent.leash.load_mcp_tools", broken_load)
+    leash = McpLeash(_stub("new"))
+    leash._client = SpyClient()
+    with pytest.raises(ConnectionError):
+        async with leash:
+            pass
+    assert closed == [(None, None, None)]

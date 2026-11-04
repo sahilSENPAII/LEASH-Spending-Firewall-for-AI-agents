@@ -42,3 +42,33 @@ async def test_nothing_to_buy_calls_leash_never():
     state = await _run({}, leash)
     assert leash.calls == [] and state["attempts"] == []
     assert "nothing on the pages matches the task" in "\n".join(state["log"])
+
+
+class TwoCartBrain:
+    async def plan(self, task, pages):
+        from decimal import Decimal
+
+        from leash_agent.brain import Purchase
+
+        return [
+            Purchase("megadeals", "md-sony-xm5", "Sony", 1, Decimal("149.00"), "test"),
+            Purchase("soundhub", "sh-sony-xm5", "Sony", 1, Decimal("179.00"), "test"),
+        ]
+
+
+class BrokenForMegadeals(RecordingLeash):
+    async def request_payment(self, mandate_id, merchant_id, items):
+        if merchant_id == "megadeals":
+            raise RuntimeError("tool failed")
+        return await super().request_payment(mandate_id, merchant_id, items)
+
+
+async def test_one_failed_cart_is_reported_and_the_others_still_pay():
+    leash = BrokenForMegadeals()
+    graph = build_graph(fetch=FileFetcher(), brain=TwoCartBrain(), leash=leash, stores={},
+                        mandate_id="m_demo", max_pages=10)
+    state = await graph.ainvoke({"task": DEMO_TASK, "log": []})
+    decisions = {a.merchant_id: a.response["decision"] for a in state["attempts"]}
+    assert decisions == {"megadeals": "ERROR", "soundhub": "ALLOW"}
+    assert [c[1] for c in leash.calls] == ["soundhub"]
+    assert "agent_error: RuntimeError: tool failed" in "\n".join(state["log"])

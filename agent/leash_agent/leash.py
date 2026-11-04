@@ -59,10 +59,17 @@ class McpLeash:
     async def __aenter__(self):
         self._session_cm = self._client.session("leash")
         session = await self._session_cm.__aenter__()
-        self._tools = {t.name: t for t in await load_mcp_tools(session)}
-        if "request_payment" not in self._tools:
-            await self.__aexit__(None, None, None)
-            raise RuntimeError(f"Leash has no request_payment tool (tools: {sorted(self._tools)})")
+        try:
+            self._tools = {t.name: t for t in await load_mcp_tools(session)}
+            if "request_payment" not in self._tools:
+                raise RuntimeError(
+                    f"Leash has no request_payment tool (tools: {sorted(self._tools)})"
+                )
+        except BaseException:
+            # `async with` does not call __aexit__ when __aenter__ fails, so close the session
+            # here (normally, so the MCP client shuts down cleanly), then re-raise the error.
+            await self._session_cm.__aexit__(None, None, None)
+            raise
         return self
 
     async def __aexit__(self, *exc):

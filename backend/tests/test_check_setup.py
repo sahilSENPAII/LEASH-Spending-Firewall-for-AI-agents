@@ -10,7 +10,7 @@ from app.config import Settings
 from app.mandates import MandateTerms, create_mandate, generate_signing_key
 from app.models import AuditEvent
 from scripts import check_setup
-from scripts.check_setup import key_fingerprint, report, run_checks
+from scripts.check_setup import alembic_head, key_fingerprint, report, run_checks
 
 NOW = datetime(2026, 11, 3, 12, 0, tzinfo=UTC)
 KEY = generate_signing_key()
@@ -137,3 +137,16 @@ async def test_main_passes_on_a_good_setup(seeded, monkeypatch, capsys):
     monkeypatch.setattr(check_setup, "get_sessionmaker", lambda: seeded)
     assert await check_setup.main() == 0
     assert "5/5 checks passed" in capsys.readouterr().out
+
+
+def test_expected_migration_is_the_newest_in_the_repo():
+    assert alembic_head() == "0002"
+
+
+async def test_a_newer_migration_is_expected_once_it_exists(seeded, monkeypatch):
+    async with seeded() as s:
+        await s.execute(text("UPDATE alembic_version SET version_num = '0003'"))
+        await s.commit()
+    monkeypatch.setattr(check_setup, "alembic_head", lambda: "0003")
+    checks = await _run(seeded)
+    assert checks["migration"].ok and checks["migration"].detail.endswith("expected 0003")

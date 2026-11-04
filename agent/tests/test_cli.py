@@ -45,3 +45,14 @@ def test_errors_print_one_line_and_exit_1(monkeypatch, capsys):
 def test_bad_scenario_is_rejected():
     with pytest.raises(SystemExit):
         parse_args(["shopping"])
+
+
+def test_a_cart_error_makes_the_cli_exit_1(monkeypatch):
+    from leash_agent.graph import PaymentAttempt
+
+    async def fake_run(args, settings):
+        return {"attempts": [PaymentAttempt("megadeals", (), {"decision": "ERROR"})]}
+
+    monkeypatch.setattr("leash_agent.__main__.run", fake_run)
+    monkeypatch.setattr("leash_agent.__main__.get_settings", lambda: None)
+    assert main(["attack", "--standin"]) == 1

@@ -12,7 +12,9 @@ import base64
 import hashlib
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
+from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,7 +23,7 @@ from app.config import Settings, get_settings
 from app.db import get_sessionmaker
 from app.mandates import get_mandate, load_signing_key, public_key_b64, verify_mandate
 
-EXPECTED_REVISION = "0002"
+MIGRATIONS_DIR = Path(__file__).resolve().parents[1] / "migrations"
 DEMO_MANDATE_ID = "m_demo"
 
 
@@ -30,6 +32,11 @@ class Check:
     name: str
     ok: bool
     detail: str
+
+
+def alembic_head() -> str:
+    """The newest migration in this checkout (so a new 0003 does not make the check fail)."""
+    return ScriptDirectory(str(MIGRATIONS_DIR)).get_current_head()
 
 
 def key_fingerprint(key_b64: str) -> str:
@@ -50,12 +57,9 @@ async def run_checks(session: AsyncSession, settings: Settings) -> list[Check]:
 
     try:
         revision = await session.scalar(text("SELECT version_num FROM alembic_version"))
+        head = alembic_head()
         checks.append(
-            Check(
-                "migration",
-                revision == EXPECTED_REVISION,
-                f"database is at {revision}, expected {EXPECTED_REVISION}",
-            )
+            Check("migration", revision == head, f"database is at {revision}, expected {head}")
         )
     except Exception as exc:
         await session.rollback()

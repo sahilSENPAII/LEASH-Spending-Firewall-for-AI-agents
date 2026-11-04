@@ -55,11 +55,11 @@ async def run(args, settings, *, fetcher=None, leash=None) -> dict:
 def main(argv=None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     try:
-        asyncio.run(run(args, get_settings()))
+        state = asyncio.run(run(args, get_settings()))
     except Exception as exc:  # show one clear line, not a traceback, during a live demo
         print(f"error   {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
-    return 0
+    return 1 if any(a.response.get("decision") == "ERROR" for a in state["attempts"]) else 0
 
 
 if __name__ == "__main__":

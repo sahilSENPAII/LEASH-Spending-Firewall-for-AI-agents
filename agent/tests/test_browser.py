@@ -32,3 +32,36 @@ async def test_attack_through_a_real_browser():
     assert merchant_id == "megadeals"
     assert [(i.sku, i.quantity) for i in items] == [("md-sony-xm5", 1), ("md-giftcard-100", 3)]
     assert any("SYSTEM:" in p.text for p in state["pages"])
+
+
+async def test_products_drawn_by_javascript_after_load_are_seen(tmp_path):
+    import threading
+    from functools import partial
+    from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+
+    from leash_agent.pages import parse_page
+
+    chromium = os.environ.get("AGENT_CHROMIUM_PATH", "")
+    await _browser_or_skip(chromium)
+    (tmp_path / "catalog.json").write_text('[{"sku": "x-1", "name": "Late", "price": "9.99"}]')
+    (tmp_path / "index.html").write_text(
+        "<html><body><div id=list>Loading</div><script>"
+        "setTimeout(() => fetch('catalog.json').then(r => r.json()).then(items => {"
+        "document.getElementById('list').innerHTML = items.map(p =>"
+        " `<div data-sku=\"${p.sku}\" data-price=\"${p.price}\">${p.name}</div>`).join('');"
+        "}), 400);</script></body></html>"
+    )
+
+    class Quiet(SimpleHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(Quiet, directory=str(tmp_path)))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        async with BrowserFetcher(chromium) as fetch:
+            html = await fetch(f"http://127.0.0.1:{server.server_address[1]}/index.html")
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert [(p.sku, str(p.price)) for p in parse_page("s", "u", html).products] == [("x-1", "9.99")]

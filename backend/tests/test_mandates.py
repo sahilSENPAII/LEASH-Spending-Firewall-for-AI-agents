@@ -611,7 +611,7 @@ PG_TEST_URL = os.environ.get("LEASH_PG_TEST_URL", "")
 
 
 @pytest.mark.skipif(not PG_TEST_URL, reason="set LEASH_PG_TEST_URL to run against real Postgres")
-async def test_concurrent_reserves_cannot_overspend_on_postgres():
+async def test_concurrent_reserves_cannot_overspend_on_postgres(settings):
     url, needs_ssl = to_async_url(PG_TEST_URL)
     engine = create_async_engine(url, connect_args={"ssl": True} if needs_ssl else {})
     sessions = async_sessionmaker(engine, expire_on_commit=False)
