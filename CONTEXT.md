@@ -131,8 +131,8 @@ Ask Sahil for the shared sandbox values.
 ## In progress
 - Anurag + Claude + Codex: read-only payment/audit APIs are merged into `main` as `783a1ed`; Neon
   check passed 5/5 on Anurag's machine with shared-key fingerprint `cd628e356acd`. Next is the AG Grid
-  console in `frontend/`. The stand-in attack dry-run remains pending the Playwright Node driver
-  memory issue.
+  console in `frontend/`. The scripted stand-in attack against Neon was BLOCKED; `/payments` showed
+  the $449.00 blocked cart and `/audit/verify` confirmed 12 valid entries.
 - Sahil + Claude: next is `request_payment(mandate_id, merchant_id, items=[{sku, quantity}])` with a
   shared server-side catalog and the demo stores (SoundHub :8101, MegaDeals :8102); then HTTP MCP
   transport + `list_mandates` / `get_payment_status`, Render deploy, Groq intent judge (`app/judge.py`).
@@ -190,8 +190,8 @@ Ask Sahil for the shared sandbox values.
       `agent/leash_agent/leash.py`.
 - [ ] Sahil: write `risk_score` (string) and `judge` into the `payment.decided` audit payload when
       the model and judge run; the console reads them from there.
-- [ ] Anurag: rerun `uv run python -m leash_agent attack --standin --dry-run` after the Playwright
-      Node driver memory issue is resolved.
+- [x] Anurag: run `uv run python -m leash_agent attack --standin` against Neon; Leash BLOCKED the
+      injected cart, `/payments` showed it, and `/audit/verify` returned 12 valid entries (Nov 5).
 - [ ] Anurag: point the attack agent at Sahil's real stores when available. Do not run `normal`
       against Neon without Sahil.
 - [x] Anurag: implement synthetic data + XGBoost + SHAP anomaly scoring (`ac1f611`, merged into
@@ -201,6 +201,13 @@ Ask Sahil for the shared sandbox values.
 - [ ] Anurag (Nov 5–6): AG Grid audit console in `frontend/` on top of the read routes.
 
 ## Log (newest first)
+
+### 2026-11-05 01:40 IST — Anurag + Claude + Codex
+- Installed Playwright Chromium and ran the scripted stand-in attack against Neon. Leash BLOCKED the
+  MegaDeals cart (`merchant_not_allowed`, `amount_exceeds_max_payment_amount`); no capture was made.
+- `GET /payments` showed the BLOCKED $449.00 payment; `GET /audit/verify` returned `ok: true`,
+  12 checked entries, and no bad id. The latest audit event was `payment.blocked` for that payment.
+- Files: `CONTEXT.md`.
 
 ### 2026-11-05 01:36 IST — Anurag + Claude + Codex
 - Verified Neon from Anurag's machine: 5/5 checks passed; database reachable, shared signing-key
