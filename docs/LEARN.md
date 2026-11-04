@@ -323,3 +323,120 @@ alarms; at 0.9, 88% with none. STEP_UP at 0.5 (ask the human) and BLOCK at 0.9 i
    add STEP_UP or BLOCK; a learned model must never override a deterministic rule (D2).
 5. **How do you make training reproducible?** Fixed seed, single thread, saved feature list and version
    inside the model file; the test suite checks the committed model's metadata.
+
+---
+
+## Money path (Nov 1–4) — Sahil
+
+### What was built
+| Piece | File | One line |
+|---|---|---|
+| Backend skeleton | `backend/app/{main,config,db,models}.py`, Alembic `0001` | FastAPI app, settings from `.env`, async Postgres (Neon), `payments` + `audit_events` tables |
+| Payment state machine | `backend/app/state.py` | The only way a payment's status can change; illegal moves raise |
+| PayPal client | `backend/app/paypal.py` | OAuth token cache, authorize with the saved wallet, capture, void, `PayPal-Request-Id` on every write |
+| Orchestrator | `backend/app/orchestrator.py` | One `request_payment`: row → rules + budget hold → audit → PayPal → audit |
+| MCP server | `backend/app/mcp_server.py` | Exposes `request_payment` to any MCP agent (Claude Desktop, the LangGraph agent) |
+| Switch to the trust path (Nov 3) | `orchestrator.py` | Uses Anurag's `check_and_reserve` / `release_budget` / `append_audit`; demo mandate and unlocked usage query removed |
+| Race test (Nov 4) | `backend/tests/test_mandates.py` | Proves on real Postgres that two payments at once cannot overspend a mandate |
+| Saga reconcile (Nov 4) | `backend/app/reconcile.py`, `scripts/reconcile_payments.py` | Fixes payments left half-done when the database failed after PayPal moved money |
+
+Verified for real: Claude Desktop paid $1 through the MCP server on Neon (ALLOW, captured), MegaDeals and
+$250 were blocked, `/audit/verify` returned `ok: true`, and the race test passed on Neon.
+
+### Concepts, in plain words
+
+**The orchestrator.** The "conductor" of one payment. It does not decide the rules itself; it calls the
+pieces in a fixed order and records each step. Order (CONTRACTS 5.3):
+1. Insert the payment row as `REQUESTED` and flush it, so it has an ID.
+2. `check_and_reserve`: run the rules and, if they pass, hold the budget. One step, one lock.
+3. `append_audit("payment.decided")`, then commit. Row + hold + audit are saved together or not at all.
+4. BLOCK → mark `BLOCKED`, audit, done. Nothing ever touches PayPal.
+5. ALLOW → PayPal authorize → `AUTHORIZED` → capture → `CAPTURED`. Each step committed with its audit entry.
+
+**Transaction.** A group of database changes that all happen or none happen. If the audit write fails,
+the payment row and the budget hold roll back too, so there is never a decision without an audit entry.
+
+**Why no transaction stays open during PayPal calls.** A PayPal call can take seconds. Holding a database
+lock that long would block every other payment on the same mandate. So: commit, call PayPal with no
+lock held, then open a new short transaction to record the result.
+
+**State machine.** A payment can only move along allowed arrows:
+`REQUESTED → BLOCKED`, `REQUESTED → AUTHORIZED → CAPTURED`, `AUTHORIZED → VOIDED`, and so on.
+`transition(current, target)` refuses anything else (for example `REQUESTED → CAPTURED`, which would mean
+taking money that was never held). Final states like `CAPTURED` and `BLOCKED` have no exits.
+
+**The budget race (and the fix).** Old code: read "how much is spent?", decide, then save. Two payments
+arriving together could both read "$4 left", both pass, and spend $8. The fix is `check_and_reserve`:
+it locks the mandate's row (`SELECT ... FOR UPDATE`), so the second payment waits until the first has
+checked AND saved its hold. Then the second one sees the updated number and is blocked. A lock turns
+"check, then act" into one step nobody can squeeze between.
+
+**Lock order and deadlocks.** Two locks are used: the mandate row lock and the audit chain lock. If one
+payment took them in the order mandate → audit and another in audit → mandate, each could wait for the
+other forever (a deadlock). Rule: always mandate first, audit second. Same order everywhere = no deadlock.
+
+**Budget hold and release.** On ALLOW the budget is "held" (counted as spent) before PayPal is called.
+If the payment later fails or is voided, `release_budget` gives it back. A captured payment keeps its
+hold forever, because the money was really spent.
+
+**Why every audit write goes through `append_audit`.** Each audit entry stores a hash of the previous one
+(a chain). A row written directly, without a hash, breaks the chain: `/audit/verify` fails and the next
+append refuses to continue. So the orchestrator never writes `AuditEvent(...)` itself.
+
+**Race test on real Postgres.** SQLite (used in normal tests) ignores row locks, so it cannot prove the
+lock works. The race test runs only when `LEASH_PG_TEST_URL` is set: it creates a throwaway mandate with
+a $10 budget, fires two $6 reserves at the same moment (`asyncio.gather`), and expects exactly one
+ALLOW and one BLOCK. With the lock removed it fails (both pass), which proves the test catches the bug.
+
+**Saga and compensation.** A saga is a multi-step process across systems (our DB and PayPal) that cannot
+share one transaction. Instead, each step has an "undo": if capture fails, void the hold and release
+the budget. The leftover risk: the database write fails *after* PayPal already held or took money, so
+our record says `REQUESTED` or `AUTHORIZED` while PayPal says otherwise.
+
+**Reconcile.** A clean-up job for exactly that leftover risk. It finds payments stuck for more than N
+minutes (default 15, minimum 5 so it never touches one still in progress) and asks PayPal, the source of
+truth, what really happened:
+- PayPal says captured → mark `CAPTURED`, keep the hold.
+- PayPal says still held → void it, release the budget, mark `VOIDED`.
+- PayPal never saw it → release the budget, mark `FAILED`.
+PayPal cannot search orders by idempotency key, so for a `REQUESTED` row it resends the create-order
+call with the same key: PayPal returns the existing order if there was one (HTTP 200), or makes a new
+one (201), which reconcile voids at once. Keys expire after 6 hours, so older rows go to manual review.
+
+**Idempotency, again.** Every PayPal write uses the payment's stored `idempotency_key` (plus `-capture`,
+`-void`), so retries and reconcile replays never double-charge.
+
+### Why this design over alternatives
+- Rules + hold in one locked step, not "read then write": the only way to stop concurrent overspending.
+- Short transactions around network calls instead of one long one: no lock is held while waiting on PayPal.
+- Reconcile with PayPal as the source of truth instead of trusting our DB: after a crash, PayPal knows
+  what really happened to the money; our row might not.
+- Fail safe everywhere: any error → BLOCK (or STEP_UP later), never ALLOW.
+
+### Likely interview questions
+1. **Walk me through what happens when an agent calls `request_payment`.**
+   Row inserted and flushed → `check_and_reserve` (rules + budget hold under a row lock) → audit →
+   commit → BLOCK stops here; ALLOW → PayPal authorize → audit → capture → audit.
+   *Follow-up: why insert the row before checking?* The hold and audit entries need the payment ID, and
+   a blocked request should still leave a record.
+2. **How do you stop two payments from overspending the same budget?**
+   `SELECT ... FOR UPDATE` on the mandate row inside `check_and_reserve`, so check and hold are atomic.
+   *Follow-up: how did you prove it?* A Postgres-only test fires two $6 reserves at a $10 mandate at
+   once; exactly one passes. Removing the lock makes the test fail.
+3. **What's a deadlock and how do you avoid one here?**
+   Two transactions each waiting for a lock the other holds. Avoided with a fixed lock order: mandate row
+   first, audit lock second, everywhere.
+4. **Why not keep one transaction open across the PayPal call?**
+   It would hold the mandate lock for seconds and block other payments; and a network call can't be rolled
+   back anyway. So: short transactions, plus compensation (void + release) when a later step fails.
+5. **What is a saga? What can go wrong in yours?**
+   A multi-step process across systems with an undo per step. The gap: DB write fails after PayPal moved
+   money. Reconcile fixes it later using PayPal as the source of truth.
+   *Follow-up: how do you look up a PayPal order you never saved?* Replay the create call with the same
+   idempotency key; 200 means it existed, 201 means a new one was made and gets voided.
+6. **Why does every audit entry go through `append_audit`?**
+   The log is a hash chain; a direct write has no hash, breaks `/audit/verify` and stops later appends.
+7. **What does the state machine protect against?**
+   Impossible jumps like capturing money that was never authorized, or reviving a blocked payment.
+8. **Why do you test locks on Postgres and not SQLite?**
+   SQLite ignores `FOR UPDATE`, so a passing SQLite test proves nothing about concurrency.
