@@ -4,6 +4,7 @@ from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
+from mcp.server.fastmcp.exceptions import ToolError
 from sqlalchemy import select
 
 from app import anomaly, db, mandates, mcp_server, orchestrator
@@ -12,7 +13,13 @@ from app.audit import verify_chain
 from app.catalog import DEFAULT_CATALOG_PATH, load_catalog
 from app.config import Settings
 from app.main import app
-from app.mandates import MandateTerms, create_mandate, generate_signing_key, get_mandate
+from app.mandates import (
+    MandateTerms,
+    create_mandate,
+    generate_signing_key,
+    get_mandate,
+    revoke_mandate,
+)
 from app.models import AuditEvent, BudgetHold, Payment
 from app.paypal import Authorization, PayPalError
 from app.state import PaymentStatus
@@ -536,6 +543,9 @@ async def test_database_error_blocks():
 
 async def test_mcp_tool_is_registered():
     tools = {t.name: t for t in await mcp_server.mcp.list_tools()}
+    assert set(tools) == {"request_payment", "list_mandates", "get_payment_status"}
+    assert tools["list_mandates"].inputSchema.get("required", []) == []
+    assert tools["get_payment_status"].inputSchema["required"] == ["payment_id"]
     schema = tools["request_payment"].inputSchema
     assert set(schema["required"]) == {"mandate_id", "merchant_id", "items"}
     assert schema["properties"]["items"]["type"] == "array"
@@ -549,3 +559,173 @@ async def test_mcp_tool_blocks_when_setup_fails(monkeypatch):
     monkeypatch.setattr(mcp_server, "get_sessionmaker", broken)
     result = await mcp_server.request_payment("m_demo", "soundhub", [SONY])
     assert result == orchestrator.internal_error()
+
+
+@pytest.fixture
+def mcp_env(sessions, monkeypatch):
+    """The MCP tools on the test database, with fake PayPal and a known bearer token."""
+    paypal = FakePayPal()
+    settings = Settings(_env_file=None, paypal_vault_id="VAULT", mcp_auth_token="s3cret-token")
+    monkeypatch.setattr(mcp_server, "get_sessionmaker", lambda: sessions)
+    monkeypatch.setattr(mcp_server, "get_paypal", lambda: paypal)
+    monkeypatch.setattr(mcp_server, "get_settings", lambda: settings)
+    return paypal, settings
+
+
+async def test_list_mandates_shows_what_is_left_with_money_as_strings(sessions, mcp_env):
+    assert (await _pay(sessions, FakePayPal()))["decision"] == "ALLOW"
+    async with sessions() as s:
+        await revoke_mandate(s, "m_big", NOW)
+        await s.commit()
+
+    result = await mcp_server.list_mandates()
+
+    # Same created_at, so Anurag's list_mandates orders them by id.
+    assert result == {
+        "mandates": [
+            {
+                "mandate_id": "m_big",
+                "intent": DEMO_TERMS["intent"],
+                "category": "electronics",
+                "max_payment_amount": "200.00",
+                "remaining_budget": "5000.00",
+                "remaining_count": 5,
+                "expires_at": "2026-12-31T00:00:00Z",
+                "revoked": True,
+            },
+            {
+                "mandate_id": "m_demo",
+                "intent": DEMO_TERMS["intent"],
+                "category": "electronics",
+                "max_payment_amount": "200.00",
+                "remaining_budget": "321.00",
+                "remaining_count": 4,
+                "expires_at": "2026-12-31T00:00:00Z",
+                "revoked": False,
+            },
+        ]
+    }
+
+
+async def test_get_payment_status_returns_the_decision_response(sessions, mcp_env):
+    paid = await _pay(sessions, FakePayPal())
+    blocked = await _pay(sessions, FakePayPal(), merchant_id="megadeals", items=[])
+
+    status = await mcp_server.get_payment_status(paid["payment_id"])
+    assert {k: status[k] for k in paid} == paid
+    assert status["amount"] == "179.00" and status["approval_url"] is None
+    assert "paypal_order_id" not in status and "paypal_authorization_id" not in status
+
+    status = await mcp_server.get_payment_status(blocked["payment_id"])
+    assert (status["decision"], status["status"]) == ("BLOCK", S.BLOCKED)
+    assert [r["code"] for r in status["reasons"]] == ["empty_cart"]
+    assert status["risk_score"] is None
+
+
+async def test_get_payment_status_unknown_id_is_a_clear_tool_error(mcp_env):
+    with pytest.raises(ToolError, match="No payment with id 'p-nope'"):
+        await mcp_server.get_payment_status("p-nope")
+
+
+async def test_read_tools_hide_database_errors(monkeypatch):
+    def broken():
+        raise RuntimeError("password=hunter2 host=db.internal")
+
+    monkeypatch.setattr(mcp_server, "get_sessionmaker", broken)
+    with pytest.raises(ToolError) as caught:
+        await mcp_server.list_mandates()
+    assert str(caught.value) == "Leash could not read the mandates."
+    with pytest.raises(ToolError) as caught:
+        await mcp_server.get_payment_status("p-1")
+    assert str(caught.value) == "Leash could not read the payment."
+
+
+MCP_HEADERS = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
+
+
+def _rpc(method, params=None, id=1):
+    return {"jsonrpc": "2.0", "id": id, "method": method, "params": params or {}}
+
+
+@pytest.mark.parametrize(
+    "authorization",
+    [
+        None,
+        "",
+        "Bearer",
+        "Bearer wrong",
+        "bearer s3cret-token",
+        "s3cret-token",
+        "Bearer s3cret-tokenX",
+    ],
+)
+def test_mcp_over_http_needs_the_bearer_token(mcp_env, authorization):
+    headers = MCP_HEADERS | ({"Authorization": authorization} if authorization is not None else {})
+    r = TestClient(app).post("/mcp", headers=headers, json=_rpc("tools/list"))
+
+    assert r.status_code == 401
+    assert r.headers["www-authenticate"] == "Bearer"
+    assert r.json() == {"detail": "Missing or wrong bearer token."}
+
+
+def test_mcp_over_http_is_off_without_a_token(monkeypatch):
+    settings = Settings(_env_file=None, mcp_auth_token="")
+    monkeypatch.setattr(mcp_server, "get_settings", lambda: settings)
+    for headers in (MCP_HEADERS, MCP_HEADERS | {"Authorization": "Bearer "}):
+        r = TestClient(app).post("/mcp", headers=headers, json=_rpc("tools/list"))
+        assert r.status_code == 503
+        assert "MCP_AUTH_TOKEN" in r.json()["detail"]
+
+
+async def test_rest_routes_stay_open_without_the_token(sessions, mcp_env):
+    async def session_override():
+        async with sessions() as s:
+            yield s
+
+    app.dependency_overrides[db.get_session] = session_override
+    try:
+        assert TestClient(app).get("/audit/verify").status_code == 200
+        assert TestClient(app).get("/payments").json() == []
+    finally:
+        app.dependency_overrides.clear()
+
+
+async def test_request_payment_end_to_end_over_http(sessions, mcp_env):
+    paypal, settings = mcp_env
+    headers = MCP_HEADERS | {"Authorization": f"Bearer {settings.mcp_auth_token}"}
+    # The only test that starts the app's lifespan: the SDK runs its session manager once per
+    # process.
+    with TestClient(app) as client:
+        call = _rpc(
+            "tools/call",
+            {
+                "name": "request_payment",
+                "arguments": {"mandate_id": "m_demo", "merchant_id": "soundhub", "items": [SONY]},
+            },
+        )
+        r = client.post("/mcp", headers=headers, json=call)
+        assert r.status_code == 200
+        result = r.json()["result"]
+        assert result["isError"] is False
+        # The decision is one JSON text block, which is what the agent reads.
+        (content,) = result["content"]
+        response = json.loads(content["text"])
+        assert response["decision"] == "ALLOW" and response["status"] == S.CAPTURED
+        assert [c[0] for c in paypal.calls] == ["authorize", "capture"]
+
+        status_call = _rpc(
+            "tools/call",
+            {"name": "get_payment_status", "arguments": {"payment_id": response["payment_id"]}},
+            id=2,
+        )
+        status = client.post("/mcp", headers=headers, json=status_call).json()["result"]
+        assert json.loads(status["content"][0]["text"])["status"] == S.CAPTURED
+
+        unknown = _rpc(
+            "tools/call", {"name": "get_payment_status", "arguments": {"payment_id": "nope"}}, id=3
+        )
+        error = client.post("/mcp", headers=headers, json=unknown).json()["result"]
+        assert error["isError"] is True
+        assert "No payment with id 'nope'" in error["content"][0]["text"]
+
+    assert await _chain_ok(sessions)

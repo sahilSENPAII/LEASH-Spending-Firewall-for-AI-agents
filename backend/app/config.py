@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     anomaly_block_threshold: float = Field(default=0.9, ge=0, le=1)
     # Product catalog file, relative to the repo root; empty means stores/catalog.json.
     catalog_path: str = ""
+    # Bearer token for MCP over HTTP (/mcp). Empty turns /mcp off.
+    mcp_auth_token: str = ""
     # Comma-separated origins allowed to call the API from a browser (the audit console).
     cors_origins: str = "http://localhost:5173"
 
