@@ -77,8 +77,10 @@ One entry per decision: what we chose, what we rejected, why. Newest at the bott
   every time) and `groq` (a real LLM, for realism; it may or may not fall for the injection).
 - The agent is deliberately naive: it reads hidden page text and obeys it. The defence is Leash's
   check on the payment, not the agent's judgement (D2).
-- Until the switch to `items=[{sku, quantity}]` lands, the agent reads the tool's schema and also
-  fills the old shape (`amount` + `items` string). That fallback is removed once the switch is merged.
+- The agent sends only `items=[{sku, quantity}]`; Leash prices them from its catalog. (A fallback
+  for the old `amount` shape existed until Sahil's catalog switch merged; removed Nov 5.)
+- Demos use Sahil's real stores (`python -m stores.serve`). The agent keeps its own copy of the
+  pages (`agent/standin_stores/`) so its tests run without the stores.
 
 ## D15. Anomaly model in the backend, XGBoost's own SHAP values, synthetic data
 - `backend/app/anomaly.py` holds the feature list, `build_features` and `score_anomaly`;

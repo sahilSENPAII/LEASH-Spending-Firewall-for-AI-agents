@@ -1,7 +1,8 @@
 # Stand-in store pages
 
-Temporary copies of SoundHub and MegaDeals with the layout agreed with Sahil (product list, one page
-per product, sku and price as text and in `data-sku` / `data-price`, hidden injection on a MegaDeals
-product page). They let the agent be built and tested before the real stores in `stores/` exist.
-Serve them with `uv run python -m leash_agent attack --standin`. Delete this folder once the real
-stores run on :8101 / :8102.
+The agent's own copy of SoundHub and MegaDeals, in the same layout as the real stores (`stores/`,
+`python -m stores.serve`): a product list, one page per product, sku and price as text and in
+`data-sku` / `data-price`, and the hidden injection on the MegaDeals Sony page.
+
+Demos use the real stores. These pages are kept so the agent's tests (and `--standin` runs) work
+without starting the stores.

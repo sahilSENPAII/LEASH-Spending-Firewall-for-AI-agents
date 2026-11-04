@@ -1,38 +1,23 @@
 import sys
-from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
 from leash_agent.leash import CartItem, DryRunLeash, McpLeash, parse_result, payment_arguments
 
-ITEMS = [
-    CartItem("md-sony-xm5", 1, Decimal("149.00")),
-    CartItem("md-giftcard-100", 3, Decimal("100")),
-]
+ITEMS = [CartItem("md-sony-xm5", 1), CartItem("md-giftcard-100", 3)]
 STUB = str(Path(__file__).with_name("stub_leash_server.py"))
 
 
-def _stub(shape):
-    return {"transport": "stdio", "command": sys.executable, "args": [STUB, shape]}
+def _stub():
+    return {"transport": "stdio", "command": sys.executable, "args": [STUB]}
 
 
-def test_new_shape_sends_skus_and_quantities_only():
-    schema = {"properties": {"mandate_id": {}, "merchant_id": {}, "items": {"type": "array"}}}
-    assert payment_arguments(schema, "m_demo", "megadeals", ITEMS) == {
+def test_sends_skus_and_quantities_only():
+    assert payment_arguments("m_demo", "megadeals", ITEMS) == {
         "mandate_id": "m_demo",
         "merchant_id": "megadeals",
         "items": [{"sku": "md-sony-xm5", "quantity": 1}, {"sku": "md-giftcard-100", "quantity": 3}],
-    }
-
-
-def test_old_shape_sends_the_page_total_and_an_item_string():
-    schema = {"properties": {"mandate_id": {}, "merchant_id": {}, "amount": {}, "items": {}}}
-    assert payment_arguments(schema, "m_demo", "megadeals", ITEMS) == {
-        "mandate_id": "m_demo",
-        "merchant_id": "megadeals",
-        "amount": "449.00",
-        "items": "1 x md-sony-xm5, 3 x md-giftcard-100",
     }
 
 
@@ -50,8 +35,8 @@ def test_parse_result(content, expected):
     assert parse_result(content) == expected
 
 
-async def test_mcp_new_shape_end_to_end_over_stdio():
-    async with McpLeash(_stub("new")) as leash:
+async def test_request_payment_end_to_end_over_stdio():
+    async with McpLeash(_stub()) as leash:
         blocked = await leash.request_payment("m_demo", "megadeals", ITEMS)
         allowed = await leash.request_payment("m_demo", "soundhub", ITEMS[:1])
     assert blocked["decision"] == "BLOCK"
@@ -62,17 +47,6 @@ async def test_mcp_new_shape_end_to_end_over_stdio():
         [{"sku": "md-sony-xm5", "quantity": 1}, {"sku": "md-giftcard-100", "quantity": 3}],
     ]
     assert allowed["decision"] == "ALLOW"
-
-
-async def test_mcp_old_shape_end_to_end_over_stdio():
-    async with McpLeash(_stub("old")) as leash:
-        result = await leash.request_payment("m_demo", "megadeals", ITEMS)
-    assert result["echo"] == [
-        "m_demo",
-        "megadeals",
-        "449.00",
-        "1 x md-sony-xm5, 3 x md-giftcard-100",
-    ]
 
 
 async def test_server_without_request_payment_is_refused(tmp_path):
@@ -116,7 +90,7 @@ async def test_failed_setup_still_closes_the_mcp_session(monkeypatch):
         raise ConnectionError("server died while listing tools")
 
     monkeypatch.setattr("leash_agent.leash.load_mcp_tools", broken_load)
-    leash = McpLeash(_stub("new"))
+    leash = McpLeash(_stub())
     leash._client = SpyClient()
     with pytest.raises(ConnectionError):
         async with leash:

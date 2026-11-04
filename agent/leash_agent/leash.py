@@ -1,14 +1,12 @@
 """Paying through Leash's MCP tool `request_payment`. The agent never sees PayPal.
 
-The agreed tool shape is request_payment(mandate_id, merchant_id, items=[{sku, quantity}]): the
-agent sends no price, Leash prices each sku from its own catalog. Until that lands on main, the live
-tool still takes (mandate_id, merchant_id, amount, items: str); `payment_arguments` reads the tool's
-schema and fills whichever shape the server has, so the agent works against both.
+The tool is request_payment(mandate_id, merchant_id, items=[{sku, quantity}]). The agent sends no
+price and no amount: Leash prices each sku from its own catalog, so even a hijacked agent cannot lie
+about what it pays.
 """
 
 import json
 from dataclasses import dataclass
-from decimal import Decimal
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
@@ -18,21 +16,14 @@ from langchain_mcp_adapters.tools import load_mcp_tools
 class CartItem:
     sku: str
     quantity: int
-    unit_price: Decimal  # page price; only sent to the old tool shape, never to the new one
 
 
-def payment_arguments(
-    schema: dict, mandate_id: str, merchant_id: str, items: list[CartItem]
-) -> dict:
-    properties = (schema or {}).get("properties", {})
-    args = {"mandate_id": mandate_id, "merchant_id": merchant_id}
-    if "amount" in properties:  # old shape: the agent states the total (removed by the switch)
-        total = sum((i.unit_price * i.quantity for i in items), Decimal("0"))
-        args["amount"] = f"{total:.2f}"
-        args["items"] = ", ".join(f"{i.quantity} x {i.sku}" for i in items)
-    else:
-        args["items"] = [{"sku": i.sku, "quantity": i.quantity} for i in items]
-    return args
+def payment_arguments(mandate_id: str, merchant_id: str, items: list[CartItem]) -> dict:
+    return {
+        "mandate_id": mandate_id,
+        "merchant_id": merchant_id,
+        "items": [{"sku": i.sku, "quantity": i.quantity} for i in items],
+    }
 
 
 def parse_result(content) -> dict:
@@ -78,10 +69,8 @@ class McpLeash:
     async def request_payment(
         self, mandate_id: str, merchant_id: str, items: list[CartItem]
     ) -> dict:
-        tool = self._tools["request_payment"]
-        schema = tool.args_schema if isinstance(tool.args_schema, dict) else {}
-        args = payment_arguments(schema, mandate_id, merchant_id, items)
-        return parse_result(await tool.ainvoke(args))
+        args = payment_arguments(mandate_id, merchant_id, items)
+        return parse_result(await self._tools["request_payment"].ainvoke(args))
 
 
 class DryRunLeash:

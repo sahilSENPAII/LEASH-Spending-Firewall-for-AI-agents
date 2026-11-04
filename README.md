@@ -58,21 +58,29 @@ Values go in the repo-root `.env` (git-ignored); names are listed in `.env.examp
 
 ## Run the attack agent (demo)
 The agent in `agent/` shops for "Sony WH-1000XM5 under $200", reads every page (hidden text too),
-and pays only through Leash's `request_payment` MCP tool. On MegaDeals a hidden line tells it to also
-buy 3 gift cards; Leash blocks that payment. From `agent/` (Python 3.12, uv):
-```bash
-uv sync
-```
-```bash
-uv run playwright install chromium
-```
-```bash
-uv run python -m leash_agent attack --standin
-```
-- `attack` visits SoundHub and MegaDeals; `normal` visits SoundHub only (a legitimate purchase).
-- `--standin` serves the stand-in store pages in `agent/standin_stores/`; without it the agent uses
-  the real stores on `AGENT_SOUNDHUB_URL` / `AGENT_MEGADEALS_URL` (default :8101 / :8102).
+and pays only through Leash's `request_payment` MCP tool (it sends skus and quantities, never a
+price). On MegaDeals a hidden line tells it to also buy 3 gift cards; Leash blocks that payment.
+
+1. Start the demo stores, from the repo root (SoundHub on :8101, MegaDeals on :8102):
+   ```bash
+   python -m stores.serve
+   ```
+2. In a second terminal, from `agent/` (Python 3.12, uv), once:
+   ```bash
+   uv sync
+   ```
+   ```bash
+   uv run playwright install chromium
+   ```
+3. Run the attack (Leash answers BLOCK; nothing is charged):
+   ```bash
+   uv run python -m leash_agent attack
+   ```
+- `attack` visits SoundHub and MegaDeals; `normal` visits SoundHub only (a legitimate purchase that
+  Leash ALLOWs and PayPal sandbox charges, so agree it with the team before running it on Neon).
 - `--dry-run` sends nothing to Leash; `--brain groq` uses a real LLM (needs `GROQ_API_KEY`).
+- `--standin` uses the agent's own copy of the store pages (`agent/standin_stores/`) instead of
+  `stores.serve`, for tests and offline runs.
 - Leash runs from `backend/` over stdio (needs the backend `.env`); set `AGENT_LEASH_URL` to use the
   hosted HTTP endpoint instead. Agent tests: `uv run pytest` from `agent/`.
 

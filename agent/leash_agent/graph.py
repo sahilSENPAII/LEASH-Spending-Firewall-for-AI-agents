@@ -59,7 +59,7 @@ def build_graph(*, fetch, brain, leash, stores: dict[str, str], mandate_id: str,
             carts[p.merchant_id].append(p)
         attempts, log = [], []
         for merchant_id, purchases in carts.items():
-            items = [CartItem(p.sku, p.quantity, p.unit_price) for p in purchases]
+            items = [CartItem(p.sku, p.quantity) for p in purchases]
             try:
                 response = await leash.request_payment(mandate_id, merchant_id, items)
             except Exception as exc:  # report this cart and carry on with the others
