@@ -95,9 +95,11 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1â
   agent's stand-in pages; anomaly wiring follows the items switch (STEP_UP >= 0.5, BLOCK >= 0.9,
   final thresholds by Nov 8); sync 2 is Nov 6 evening IST. `attack` on Neon is allowed; run `normal`
   only with Sahil.
-- Sahil's `origin/sahil` branch now contains shared-catalog pricing and SoundHub/MegaDeals store files.
-  The agent end-to-end test accepts `merchant_not_allowed` or `mixed_categories` while still requiring
-  `BLOCK` and `BLOCKED`; this lets either the old policy path or Sahil's earlier cart check pass.
+- Sahil's shared catalog, items-based `request_payment`, and SoundHub/MegaDeals stores were merged to
+  `main` in `b8690bb`; `backend/app/config.py` retains both `catalog_path` and `cors_origins`. His
+  anomaly-wiring commit `820d249` remains only on `origin/sahil`.
+- The agent end-to-end test accepts `merchant_not_allowed` or `mixed_categories` while still requiring
+  `BLOCK` and `BLOCKED`.
 
 - LangGraph attack agent is implemented in `agent/` and pushed to `anurag` as `5372fa2`. It uses
   Playwright, scripted or Groq planning, stand-in stores, and Leash's MCP payment tool; D14 records
@@ -114,12 +116,13 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1â
   records a temporary PostgreSQL 16 run, including 960 concurrent payments; that run was not repeated
   here. The stand-in dry-run could not start because Playwright's Node driver ran out of memory.
 
-- Item 2 anomaly model is implemented and merged into `main` (`ac1f611`, merge `4abf400`): synthetic training data,
-  XGBoost model, `score_anomaly` with up to three `pred_contribs` reasons, and `build_features` that
-  excludes the current payment's hold. The model is not wired into the orchestrator; that is Sahil's
-  task. Backend tests pass (354 passed, 1 skipped); agent tests pass (45); Ruff is clean in both.
-  The sample burst scored `0.999974`; the demo purchase scored `0.045706`. The code commit was pushed
-  to `anurag` and merged into `main`.
+- Anomaly model v2 was merged into `main` as `8cf1f50`. Its synthetic training data varies purchase
+  hours and includes honest purchases near the limit. Across 24 UTC hours, the honest first-purchase
+  score peaks at `0.108139`, the honest second-purchase score at `0.121295`, and the burst score stays
+  above `0.999155`; hold-out AUC is `0.9841`. All 96 anomaly tests pass. The new hour checks produce
+  32 failures against v1. The end-to-end backend harness pins time to 09:00 UTC and sets anomaly and
+  velocity thresholds explicitly. Current backend suite: 464 passed, 1 skipped; agent suite: 52 passed;
+  Ruff passes in both. Sahil's anomaly wiring remains on `origin/sahil` (`820d249`).
 
 ## Env vars (names only â€” values live in each person's local `.env`)
 `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_BASE_URL`, `SANDBOX_BUYER_EMAIL`,
@@ -132,14 +135,13 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1â
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Claude + Codex: read-only payment/audit APIs are merged into `main` as `783a1ed`; Neon
-  check passed 5/5 on Anurag's machine with shared-key fingerprint `cd628e356acd`. Next is the AG Grid
-  console in `frontend/`. The end-to-end test compatibility fix is merged as `6d05bfd`; 52 agent tests
-  pass and Ruff is clean. The scripted stand-in attack against Neon was BLOCKED; `/payments` showed
-  the $449.00 blocked cart and `/audit/verify` confirmed 12 valid entries.
-- Sahil + Claude: anomaly wiring is on `sahil` (`820d249`), not merged: it waits for Anurag's model fix
-  for the time-of-day finding (see the Sahil 02:15 log entry). Next: HTTP MCP transport +
-  `list_mandates` / `get_payment_status`, Render deploy, Groq intent judge (`app/judge.py`).
+- Anurag + Claude + Codex: anomaly model v2 (`8cf1f50`) and the clock-pinned end-to-end test are merged;
+  backend 464 passed, 1 skipped, agent 52 passed, Ruff clean. Neon check passed 5/5 with shared-key
+  fingerprint `cd628e356acd`; the scripted attack was BLOCKED and the audit chain verified. Next is the
+  AG Grid console in `frontend/`.
+- Sahil + Claude: catalog, stores, and items-based payments are merged (`b8690bb`). Anomaly wiring
+  (`820d249`) remains on `sahil`; the model-v2 prerequisite is now on `main`. Then HTTP MCP transport,
+  `list_mandates` / `get_payment_status`, Render deploy, and Groq intent judge (`app/judge.py`).
 
 ## Next up
 - [x] Sahil: Python 3.12 via uv; Neon project `leash` (AWS us-east-1), `DATABASE_URL` in `.env`.
@@ -161,8 +163,8 @@ Ask Sahil for the shared sandbox values.
 - [x] Sahil: orchestrator switch to `check_and_reserve` / `release_budget` / `append_audit`; payment row
       flushed first, mandate-before-audit lock order, UTC `now`, no floats, `DEMO_MANDATE` and
       `_usage()` removed (merged to `main` as `31dcdfb`, Nov 3).
-- [ ] Sahil: merge the items-based `request_payment`, shared catalog, and demo stores from `sahil` into
-      `main`; if `backend/app/config.py` conflicts, keep both `CORS_ORIGINS` and `CATALOG_PATH`.
+- [x] Sahil: merge shared-catalog pricing, items-based `request_payment`, and demo stores into `main`
+      (`b8690bb`); `catalog_path` and `cors_origins` are both present in `backend/app/config.py`.
 - [ ] Sahil (minor): fix the three `0001` nullable mismatches.
 - [x] Sahil: Postgres concurrency test for `check_and_reserve` (passed on Neon) and saga reconcile
       (`app/reconcile.py`, `scripts/reconcile_payments.py`), merged to `main` as `24dbb07` (Nov 4).
@@ -170,10 +172,8 @@ Ask Sahil for the shared sandbox values.
       decide whether to schedule it; cover `AWAITING_APPROVAL` once M5 approvals exist.
       Prices come from the shared catalog; the agent sends no price or amount. Update
       `docs/CONTRACTS.md` section 5.5.
-- [ ] Sahil (Nov 4 evening): demo stores at `http://localhost:8101` (SoundHub) and
-      `http://localhost:8102` (MegaDeals); product list plus one page per product; SKU, name and price
-      as text and in `data-sku` / `data-price`; hidden injection on a MegaDeals product page; one shared
-      catalog file for both stores and Leash's trusted prices.
+- [x] Sahil: shared-catalog SoundHub and MegaDeals demo stores with hidden injection, merged in
+      `b8690bb`.
 - [ ] Sahil (~Nov 5): Render deploy with HTTP MCP at `https://<service>.onrender.com/mcp`.
 - [x] Sahil: update the `docs/CONTRACTS.md` app paths.
 - [x] Sahil: rename `payment.error` to `payment.failed`.
@@ -189,23 +189,32 @@ Ask Sahil for the shared sandbox values.
       and `GET /audit/verify` APIs, `CORS_ORIGINS`, and backend Python 3.12 pin (`783a1ed`); 363
       backend tests passed, 1 skipped, Ruff clean.
 - [ ] Both: sync 2, Nov 6 evening IST (attack blocked end to end on Neon).
-- [ ] Anurag: when Sahil's stores and items switch land, point the agent at `:8101` / `:8102`,
-      delete `agent/standin_stores/`, and remove the old-shape fallback in
-      `agent/leash_agent/leash.py`.
+- [ ] Anurag: point the agent at `:8101` / `:8102`, delete `agent/standin_stores/`, and remove the
+      old-shape fallback in `agent/leash_agent/leash.py` for real-store demos.
 - [ ] Sahil: write `risk_score` (string) and `judge` into the `payment.decided` audit payload when
       the model and judge run; the console reads them from there.
 - [x] Anurag: run `uv run python -m leash_agent attack --standin` against Neon; Leash BLOCKED the
       injected cart, `/payments` showed it, and `/audit/verify` returned 12 valid entries (Nov 5).
-- [ ] Anurag (after Sahil's merge): point the agent at `:8101` / `:8102`, delete
-      `agent/standin_stores/`, and remove the old-shape fallback in `agent/leash_agent/leash.py`.
-      Do not run `normal` against Neon without Sahil.
-- [x] Anurag: implement synthetic data + XGBoost + SHAP anomaly scoring (`ac1f611`, merged into
-      `main` as `4abf400`; 24 new tests pass).
-- [ ] Sahil: call `build_features` and `score_anomaly` from the orchestrator; suggested STEP_UP at
-      0.5, BLOCK at 0.9, and STEP_UP on error. Final thresholds by Nov 8.
+- [x] Anurag: retrain the anomaly model with realistic time-of-day and near-limit examples, add the
+      72 hour-by-hour checks, and pin the agent E2E clock and thresholds (`8cf1f50`).
+- [ ] Sahil: merge anomaly wiring from `sahil` (`820d249`) now that model v2 is on `main`; thresholds
+      are STEP_UP at 0.5 and BLOCK at 0.9, with STEP_UP on risk-check errors.
 - [ ] Anurag (Nov 5â€“6): AG Grid audit console in `frontend/` on top of the read routes.
 
 ## Log (newest first)
+
+### 2026-11-05 02:32 IST â€” Anurag + Claude + Codex
+- Updated the synthetic anomaly data and committed model as v2 (`8cf1f50`); fixed the agent backend
+  harness at 09:00 UTC and pinned anomaly/velocity settings in the E2E test. The new hour checks fail
+  on v1 (32 failed, 40 passed) and pass on v2; the full anomaly module passes (96).
+- Backend: 464 passed, 1 skipped; agent: 52 passed; Ruff clean in both. In a disposable merge with
+  `origin/sahil` (`820d249`), the backend suite passed (473, 1 skipped); the simulated agent run
+  stalled in its E2E subprocess and was interrupted. No result is claimed for that simulated agent run.
+- Merged the model fix into `main`; Sahil's catalog/stores/items switch is already in `main` (`b8690bb`),
+  while anomaly wiring remains on `sahil` (`820d249`).
+- Files: `agent/tests/backend_harness.py`, `agent/tests/test_e2e_backend.py`,
+  `backend/app/anomaly_model.json`, `backend/scripts/train_anomaly.py`, `backend/tests/test_anomaly.py`,
+  `CONTEXT.md`.
 
 ### 2026-11-05 02:15 IST â€” Sahil + Claude
 - Merged to `main` (`b8690bb`): shared catalog `stores/catalog.json` (new setting `CATALOG_PATH`), demo
