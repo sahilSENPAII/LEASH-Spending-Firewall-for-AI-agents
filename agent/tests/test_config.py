@@ -35,3 +35,12 @@ def test_default_stores_are_sahils_ports():
         "soundhub": "http://localhost:8101",
         "megadeals": "http://localhost:8102",
     }
+
+
+def test_http_sends_the_bearer_token():
+    connection = leash_connection(_settings(leash_url="https://x/mcp", leash_token="t0ken"))
+    assert connection == {
+        "transport": "streamable_http",
+        "url": "https://x/mcp",
+        "headers": {"Authorization": "Bearer t0ken"},
+    }

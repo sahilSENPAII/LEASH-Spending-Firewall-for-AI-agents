@@ -81,8 +81,9 @@ price). On MegaDeals a hidden line tells it to also buy 3 gift cards; Leash bloc
 - `--dry-run` sends nothing to Leash; `--brain groq` uses a real LLM (needs `GROQ_API_KEY`).
 - `--standin` uses the agent's own copy of the store pages (`agent/standin_stores/`) instead of
   `stores.serve`, for tests and offline runs.
-- Leash runs from `backend/` over stdio (needs the backend `.env`); set `AGENT_LEASH_URL` to use the
-  hosted HTTP endpoint instead. Agent tests: `uv run pytest` from `agent/`.
+- Leash runs from `backend/` over stdio (needs the backend `.env`). For a hosted Leash set
+  `AGENT_LEASH_URL=https://<service>/mcp` and `AGENT_LEASH_TOKEN` to the server's `MCP_AUTH_TOKEN`.
+  Agent tests: `uv run pytest` from `agent/`.
 
 ## Run tests
 Python 3.12 and [uv](https://docs.astral.sh/uv/), from `backend/`:
