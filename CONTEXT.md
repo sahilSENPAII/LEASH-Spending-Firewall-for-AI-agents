@@ -102,6 +102,12 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1â
   The README demo uses Sahil's real stores; `agent/standin_stores/` remains for tests and offline runs.
   The supplied real-store demo report says the attack is BLOCKED (`mixed_categories`). Agent tests
   pass (50); backend tests remain at the prior result (464 passed, 1 skipped).
+- Hosted agent MCP auth: when `AGENT_LEASH_URL` is set, the agent sends `AGENT_LEASH_TOKEN` as
+  `Authorization: Bearer ...`; stdio mode is unchanged. The supplied handoff reports a local-Postgres
+  rehearsal with the real backend and stores: attack BLOCKED (`mixed_categories`) and
+  `/audit/verify` OK. It reports 487 backend tests passed (1 skipped) and 53 agent tests passed.
+  In this workspace, 52 agent tests passed excluding `test_e2e_backend.py`, which stalled on both
+  this commit and unmodified `origin/main`.
 - The agent end-to-end test accepts `merchant_not_allowed` or `mixed_categories` while still requiring
   `BLOCK` and `BLOCKED`.
 
@@ -135,13 +141,15 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1â
 `MANDATE_SIGNING_KEY` (base64 Ed25519 private key; generate once per database with `uv run python -m scripts.gen_mandate_key` from `backend/`, then provision the same key securely for Sahil, Anurag, and Render; a different key makes signature verification fail and blocks payments),
 `VELOCITY_MAX_PAYMENTS` (default 3), `VELOCITY_WINDOW_SECONDS` (default 600),
 `CORS_ORIGINS` (comma-separated browser origins; default `http://localhost:5173`), `AGENT_LEASH_URL`,
+`AGENT_LEASH_TOKEN` (bearer token for hosted Leash; same value as server-side `MCP_AUTH_TOKEN`),
 `AGENT_MANDATE_ID`, `AGENT_SOUNDHUB_URL`, `AGENT_MEGADEALS_URL`, `AGENT_BRAIN`, `AGENT_CHROMIUM_PATH`.
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Claude + Codex: real-store agent follow-up (`aaf269b`) is merged; 50 agent tests pass and
-  Ruff is clean. The supplied demo report records BLOCK (`mixed_categories`); the live Neon demo was
-  not rerun in this task. Next planned work is the AG Grid console in `frontend/`.
+- Anurag + Claude + Codex: hosted Leash bearer-token support (`14c0bab`) is merged; the agent sends
+  `AGENT_LEASH_TOKEN` only when using HTTP, while stdio remains unchanged. Ruff is clean; 52 tests
+  pass when the baseline-stalling backend E2E test is excluded. Next planned work is the AG Grid
+  console in `frontend/`.
 - Sahil + Claude: catalog, stores, and items-based payments are merged (`b8690bb`). Anomaly wiring
   (`820d249`) remains on `sahil`; the model-v2 prerequisite is now on `main`. Then HTTP MCP transport,
   `list_mandates` / `get_payment_status`, Render deploy, and Groq intent judge (`app/judge.py`).
@@ -194,6 +202,10 @@ Ask Sahil for the shared sandbox values.
 - [ ] Both: sync 2, Nov 6 evening IST (attack blocked end to end on Neon).
 - [x] Anurag + Claude + Codex: remove the old `amount` fallback; use Sahil's real stores for demos
       while keeping `agent/standin_stores/` for tests/offline runs (`aaf269b`).
+- [x] Anurag + Claude + Codex: send `AGENT_LEASH_TOKEN` as the bearer header when using hosted
+      `/mcp`; stdio remains unchanged (`14c0bab`).
+- [ ] Sahil: after Render deploy, share `MCP_AUTH_TOKEN` by DM; Anurag sets
+      `AGENT_LEASH_URL=https://<service>.onrender.com/mcp` and `AGENT_LEASH_TOKEN`, then runs `attack`.
 - [ ] Sahil: write `risk_score` (string) and `judge` into the `payment.decided` audit payload when
       the model and judge run; the console reads them from there.
 - [x] Anurag: run `uv run python -m leash_agent attack --standin` against Neon; Leash BLOCKED the
@@ -205,6 +217,17 @@ Ask Sahil for the shared sandbox values.
 - [ ] Anurag (Nov 5â€“6): AG Grid audit console in `frontend/` on top of the read routes.
 
 ## Log (newest first)
+
+### 2026-11-05 03:18 IST â€” Anurag + Claude + Codex
+- Added `AGENT_LEASH_TOKEN`; hosted agent requests now send `Authorization: Bearer <token>`, while
+  stdio is unchanged. Updated `.env.example` and README; added token-config and HTTP MCP tests.
+- Pushed code commit `14c0bab` to `anurag` and fast-forwarded it into `main`. Agent tests: 52 passed
+  with `test_e2e_backend.py` excluded; that test also stalled on unmodified `origin/main`. Ruff passed.
+- The supplied handoff reports a separate 53-pass agent run, 487 backend tests passed (1 skipped),
+  and a local-Postgres rehearsal. Sahil's DM has not been sent. Added an empty `AGENT_LEASH_TOKEN` to
+  the ignored local `.env`; `.env` is not tracked.
+- Files: `.env.example`, `README.md`, `agent/leash_agent/config.py`,
+  `agent/tests/{test_config,test_leash_http}.py`, `CONTEXT.md`.
 
 ### 2026-11-05 02:54 IST â€” Anurag + Claude + Codex
 - Removed the agent's old `amount` fallback; it now sends only SKU and quantity. Updated the README
