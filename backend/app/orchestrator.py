@@ -1,17 +1,20 @@
-"""Decision orchestrator: policy check, then PayPal authorize + capture, all recorded in Postgres.
+"""Decision orchestrator: price the cart, policy check, then PayPal authorize + capture, all
+recorded in Postgres.
 
+Leash prices every item from its own catalog (app.catalog); the agent sends no price or amount.
 Every request ends in ALLOW or BLOCK. Any error, in a check or in PayPal, is a BLOCK (D3).
 Call order and release points follow docs/CONTRACTS.md section 5.3. Status changes go through
 `app.state.transition`, and each one writes an audit event through `append_audit`.
 """
 
+import json
 import logging
 from datetime import UTC, datetime
-from decimal import Decimal, InvalidOperation
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.audit import append_audit
+from app.catalog import get_catalog, price_cart
 from app.mandates import check_and_reserve, release_budget
 from app.models import Payment
 from app.paypal import PayPalClient
@@ -20,13 +23,6 @@ from app.state import PaymentStatus, transition
 
 log = logging.getLogger(__name__)
 
-# Category comes from our own store list, never from the agent.
-MERCHANT_CATEGORIES = {"soundhub": "electronics", "megadeals": "electronics"}
-
-INVALID_AMOUNT = {
-    "code": "invalid_request_amount",
-    "message": "Request amount must be a decimal string such as 12.50.",
-}
 AUTHORIZE_FAILED = {"code": "paypal_authorize_failed", "message": "PayPal did not authorize."}
 CAPTURE_FAILED = {"code": "paypal_capture_failed", "message": "PayPal did not capture."}
 INTERNAL_ERROR = {"code": "internal_error", "message": "Leash could not complete its checks."}
@@ -52,8 +48,7 @@ async def request_payment(
     *,
     mandate_id: str,
     merchant_id: str,
-    amount: str,
-    items: str,
+    items: list[dict],
     now: datetime | None = None,
 ) -> dict:
     try:
@@ -64,7 +59,6 @@ async def request_payment(
                 vault_id,
                 mandate_id=mandate_id,
                 merchant_id=merchant_id,
-                amount=amount,
                 items=items,
                 now=now or datetime.now(UTC),
             )
@@ -80,57 +74,58 @@ async def _decide_and_pay(
     *,
     mandate_id: str,
     merchant_id: str,
-    amount: str,
-    items: str,
+    items: list[dict],
     now: datetime,
 ) -> dict:
-    try:
-        value = Decimal(amount)
-    except (InvalidOperation, TypeError, ValueError):
-        return _response(None, "BLOCK", [INVALID_AMOUNT])
-
+    cart = price_cart(get_catalog(), merchant_id, items)
     payment = Payment(
         mandate_id=mandate_id,
         merchant_id=merchant_id,
-        amount=value,
+        amount=cart.amount,
         currency="USD",
-        items=items,
+        items=json.dumps(cart.lines),
         status=PaymentStatus.REQUESTED,
         created_at=now,
     )
     session.add(payment)
     # The budget hold references payments.id, so the row must exist first.
     await session.flush()
-    decision = await check_and_reserve(
-        session,
-        payment_id=payment.id,
-        request=PaymentRequest(
-            amount=value,
-            currency="USD",
-            category=MERCHANT_CATEGORIES.get(merchant_id, ""),
-            merchant_id=merchant_id,
-        ),
-        mandate_id=mandate_id,
-        now=now,
-    )
-    reasons = [{"code": r.code, "message": r.message} for r in decision.reasons]
-    payment.decision = decision.outcome.value
+    if cart.reasons:
+        # A cart Leash cannot price is blocked before the mandate check, so no hold is taken.
+        outcome, allowed, reasons = "BLOCK", False, cart.reasons
+    else:
+        decision = await check_and_reserve(
+            session,
+            payment_id=payment.id,
+            request=PaymentRequest(
+                amount=cart.amount,
+                currency="USD",
+                category=cart.category,
+                merchant_id=merchant_id,
+            ),
+            mandate_id=mandate_id,
+            now=now,
+        )
+        outcome, allowed = decision.outcome.value, decision.is_allowed
+        reasons = [{"code": r.code, "message": r.message} for r in decision.reasons]
+    payment.decision = outcome
     payment.reasons = reasons
     await append_audit(
         session,
         event_type="payment.decided",
         payment_id=payment.id,
         payload={
-            "decision": decision.outcome.value,
+            "decision": outcome,
             "reasons": reasons,
             "mandate_id": mandate_id,
             "merchant_id": merchant_id,
-            "amount": str(value),
+            "amount": str(cart.amount),
+            "items": cart.lines,
         },
         now=now,
     )
 
-    if not decision.is_allowed:
+    if not allowed:
         await _move(session, payment, PaymentStatus.BLOCKED, now)
         await session.commit()
         return _response(payment, "BLOCK", reasons)
@@ -143,10 +138,11 @@ async def _decide_and_pay(
             raise ValueError("PAYPAL_VAULT_ID is not set")
         auth = await paypal.authorize(
             vault_id=vault_id,
-            amount=value,
+            amount=cart.amount,
             request_id=payment.idempotency_key,
             custom_id=merchant_id,
-            description=items,
+            # Same description as reconcile's replay of this call (app/reconcile.py).
+            description=payment.items,
         )
     except Exception:
         log.exception("authorize failed for payment %s", payment.id)

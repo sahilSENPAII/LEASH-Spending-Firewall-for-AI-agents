@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     mandate_signing_key: str = ""
     velocity_max_payments: int = 3
     velocity_window_seconds: int = 600
+    # Product catalog file, relative to the repo root; empty means stores/catalog.json.
+    catalog_path: str = ""
 
 
 @lru_cache

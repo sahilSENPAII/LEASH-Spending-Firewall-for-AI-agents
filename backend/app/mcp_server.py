@@ -22,10 +22,12 @@ def get_paypal() -> PayPalClient:
 
 
 @mcp.tool()
-async def request_payment(mandate_id: str, merchant_id: str, amount: str, items: str) -> dict:
-    """Ask Leash to pay a store under a mandate. `amount` is a USD decimal string, e.g. "179.00".
+async def request_payment(mandate_id: str, merchant_id: str, items: list[dict]) -> dict:
+    """Ask Leash to pay a store under a mandate for `items`, e.g. [{"sku": "sh-sony-xm5",
+    "quantity": 1}]. Send no price or amount: Leash prices each sku from its own catalog.
 
-    Leash checks the mandate, then pays only on ALLOW. Returns the decision with its reasons.
+    Leash checks the cart and the mandate, then pays only on ALLOW. Returns the decision with its
+    reasons.
     """
     try:
         sessions = get_sessionmaker()
@@ -40,7 +42,6 @@ async def request_payment(mandate_id: str, merchant_id: str, amount: str, items:
         vault_id,
         mandate_id=mandate_id,
         merchant_id=merchant_id,
-        amount=amount,
         items=items,
     )
 

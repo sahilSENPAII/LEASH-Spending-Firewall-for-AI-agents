@@ -540,8 +540,7 @@ async def _pay(sessions, paypal):
         "VAULT",
         mandate_id="m_demo",
         merchant_id="soundhub",
-        amount="50.00",
-        items="Sony WH-1000XM5",
+        items=[{"sku": "sh-sony-xm5", "quantity": 1}],
         now=NOW - timedelta(minutes=30),
     )
 
