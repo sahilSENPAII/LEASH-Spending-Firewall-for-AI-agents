@@ -1,5 +1,6 @@
 """Agent-facing MCP server (stdio). Run from backend/: uv run python -m app.mcp_server"""
 
+import os
 from functools import lru_cache
 
 from mcp.server.fastmcp import FastMCP
@@ -9,7 +10,9 @@ from app.config import get_settings
 from app.db import get_sessionmaker
 from app.paypal import PayPalClient
 
-mcp = FastMCP("leash")
+# FastMCP 1.x ignores FASTMCP_LOG_LEVEL when built in code; honour it so a caller (the demo agent)
+# can drop the per-request INFO lines. Errors are logged either way.
+mcp = FastMCP("leash", log_level=os.environ.get("FASTMCP_LOG_LEVEL", "INFO"))
 
 
 @lru_cache

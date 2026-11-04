@@ -19,3 +19,20 @@ jobs:
         run: uv run --frozen ruff check app tests scripts
       - name: Tests
         run: uv run --frozen pytest -q
+
+  agent:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen --python 3.12
+      # The end-to-end test starts the real backend MCP server, so the backend must be synced too.
+      - run: uv sync --frozen --python 3.12 --directory ../backend
+      - run: uv run --frozen playwright install --with-deps chromium
+      - name: Lint
+        run: uv run --frozen ruff check leash_agent tests
+      - name: Tests
+        run: uv run --frozen pytest -q

@@ -67,3 +67,15 @@ One entry per decision: what we chose, what we rejected, why. Newest at the bott
 - A Postgres advisory lock serializes appends so two requests cannot link to the same previous entry.
 - Known limit: deleting the newest entries (truncating the tail) leaves a valid shorter chain. For the
   demo the console shows the entry count; production would publish the head hash somewhere external.
+
+## D14. The demo attack agent lives in `agent/` with its own dependency list
+- `agent/pyproject.toml` lists LangGraph, the LangChain MCP adapter, Groq and Playwright. The backend,
+  its CI job and the Render deploy stay free of the browser and LLM packages. Same repo, own folder.
+- The agent reaches Leash only through the MCP tool `request_payment`, like any outside agent would.
+  `AGENT_LEASH_URL` empty = start the backend MCP server over stdio; a URL = HTTP. One setting.
+- Two brains: `scripted` (deterministic, used by tests and the recorded demo, so the attack happens
+  every time) and `groq` (a real LLM, for realism; it may or may not fall for the injection).
+- The agent is deliberately naive: it reads hidden page text and obeys it. The defence is Leash's
+  check on the payment, not the agent's judgement (D2).
+- Until the switch to `items=[{sku, quantity}]` lands, the agent reads the tool's schema and also
+  fills the old shape (`amount` + `items` string). That fallback is removed once the switch is merged.
