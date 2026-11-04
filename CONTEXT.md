@@ -25,7 +25,7 @@ checked against a user-signed mandate → ALLOW / STEP-UP / BLOCK, and logged in
 Stack: Python 3.12, FastAPI, Postgres (Neon), MCP Python SDK 1.x, PayPal REST v2 sandbox, Groq via
 LiteLLM, XGBoost + SHAP, LangGraph + Playwright demo agent, React + AG Grid. Zero spend (see D6).
 
-Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1–D13),
+Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1–D15),
 `docs/LEARN.md` (concepts), `spikes/README.md` (how to run the M0 tests).
 
 ## Milestones
@@ -35,7 +35,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 | M1 | Oct 31–Nov 1 | Thin end-to-end flow + deploy: Claude pays $1 sandbox via hosted Leash | Local flow **done** (Claude Desktop paid $1 sandbox through the orchestrator); hosted deploy pending (Sahil, Render) |
 | M2 | Nov 2–3 | Mandates (Ed25519), policy engine, state machine, idempotency, saga, hash-chained audit | **Mostly done**: policy, signed mandates, budget holds, audit chain (Anurag); state machine, idempotency keys, void on capture failure (Sahil). Orchestrator switch to `check_and_reserve` / `release_budget` / `append_audit` and migration `0002` on Neon **done** (Nov 3). Budget lock proven on Neon under concurrency; saga reconcile added (Nov 4) |
 | M3 | Nov 4–5 | Attack demo: SoundHub + MegaDeals stores, LangGraph agent, injection blocked | Agent merged into `main` as `3be8391`; 45 agent tests pass; real-store integration pending |
-| M4 | Nov 6–7 | Groq intent judge + XGBoost/SHAP anomaly model | — |
+| M4 | Nov 6–7 | Groq intent judge + XGBoost/SHAP anomaly model | Anomaly model implemented on local `anurag` (`ac1f611`); 24 tests included in 354 passing backend tests; orchestrator wiring pending Sahil |
 | M5 | Nov 8 | Step-up approval via web page, survives restart | — |
 | M6 | Nov 9–10 | React frontend + AG Grid audit console. **Feature freeze Nov 10 23:59** | — |
 | M7 | Nov 11 | Hardening, README, demo video | — |
@@ -90,6 +90,13 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
   The stand-in attack dry-run planned the gift-card injection and sent no payment. Merged into `main`
   as `3be8391`.
 
+- Item 2 anomaly model is implemented in local commit `ac1f611` on `anurag`: synthetic training data,
+  XGBoost model, `score_anomaly` with up to three `pred_contribs` reasons, and `build_features` that
+  excludes the current payment's hold. The model is not wired into the orchestrator; that is Sahil's
+  task. Backend tests pass (354 passed, 1 skipped); agent tests pass (45); Ruff is clean in both.
+  The sample burst scored `0.999974`; the demo purchase scored `0.045706`. The code commit is local,
+  not pushed or merged.
+
 ## Env vars (names only — values live in each person's local `.env`)
 `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_BASE_URL`, `SANDBOX_BUYER_EMAIL`,
 `MERCHANT_SOUNDHUB_EMAIL`, `MERCHANT_MEGADEALS_EMAIL`, `PLATFORM_MERCHANT_EMAIL`, `GROQ_API_KEY`,
@@ -101,7 +108,8 @@ Ask Sahil for the shared sandbox values.
 
 ## In progress
 - Anurag + Codex: the attack agent is merged into `main` as `3be8391`; its tests and Ruff pass. Neon setup verification is still pending until `DATABASE_URL` is added to the ignored local `.env`.
-- Anurag + Codex: item 2 anomaly model on `anurag` — synthetic payment data, deterministic XGBoost model, `score_anomaly`, and `build_features`; orchestrator integration remains with Sahil.
+- Anurag + Codex: anomaly model is committed locally on `anurag` as `ac1f611`; tests and Ruff pass.
+  The code commit is not pushed or merged. Sahil owns orchestrator integration.
 - Sahil + Claude: next is `request_payment(mandate_id, merchant_id, items=[{sku, quantity}])` with a
   shared server-side catalog and the demo stores (SoundHub :8101, MegaDeals :8102); then HTTP MCP
   transport + `list_mandates` / `get_payment_status`, Render deploy, Groq intent judge (`app/judge.py`).
@@ -150,11 +158,25 @@ Ask Sahil for the shared sandbox values.
       Nov 4).
 - [ ] Anurag: point the attack agent at Sahil's real stores when available. Do not run `normal`
       against Neon without Sahil.
+- [x] Anurag: implement synthetic data + XGBoost + SHAP anomaly scoring (`ac1f611` on local
+      `anurag`; 24 new tests pass). Push/merge remains pending.
 - [ ] Sahil: call `build_features` and `score_anomaly` from the orchestrator after the anomaly model
       lands; agree on STEP_UP / BLOCK thresholds.
 - [ ] Anurag (Nov 5–6): AG Grid audit console (needs `GET /audit` and `GET /payments`).
 
 ## Log (newest first)
+
+### 2026-11-04 23:43 IST — Anurag + Codex
+- Applied the anomaly-model patch as commit `ac1f611` on local `anurag`: synthetic generator,
+  XGBoost training, `score_anomaly`, `build_features`, model JSON, tests, D15, contract and learning
+  notes, and `ml/README.md`.
+- Backend: 354 passed, 1 skipped; Ruff clean. Agent: 45 passed; Ruff clean. Sample scores were
+  `0.999974` for the burst and `0.045706` for the demo purchase. Backend checks needed BLAS threads
+  limited after the first parallel run hit an OpenBLAS allocation failure.
+- The code commit is not pushed or merged. The scorer remains unwired; Sahil owns orchestrator use.
+- Files: `backend/app/{anomaly.py,anomaly_model.json}`, `backend/scripts/train_anomaly.py`,
+  `backend/tests/test_anomaly.py`, `backend/{pyproject.toml,uv.lock}`, `docs/{CONTRACTS,DECISIONS,LEARN}.md`,
+  `ml/README.md`, `CONTEXT.md`.
 
 ### 2026-11-04 23:37 IST — Anurag + Codex
 - Claimed anomaly-model item 2 on `anurag`: synthetic data, XGBoost model, anomaly scoring and
