@@ -33,7 +33,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 | ID | Dates | Goal | Status |
 |---|---|---|---|
 | M0 | Oct 30–31 | Setup + 3 de-risking spikes | **Done** |
-| M1 | Oct 31–Nov 1 | Thin end-to-end flow + deploy: Claude pays $1 sandbox via hosted Leash | Local flow **done** (Claude Desktop paid $1 sandbox through the orchestrator); hosted deploy pending (Sahil, Render) |
+| M1 | Oct 31–Nov 1 | Thin end-to-end flow + deploy: Claude pays $1 sandbox via hosted Leash | **Done** (Nov 5): hosted on Render; Claude Desktop paid through hosted `/mcp` (ALLOW → CAPTURED) and the gift-card cart was BLOCKED |
 | M2 | Nov 2–3 | Mandates (Ed25519), policy engine, state machine, idempotency, saga, hash-chained audit | **Mostly done**: policy, signed mandates, budget holds, audit chain (Anurag); state machine, idempotency keys, void on capture failure (Sahil). Orchestrator switch to `check_and_reserve` / `release_budget` / `append_audit` and migration `0002` on Neon **done** (Nov 3). Budget lock proven on Neon under concurrency; saga reconcile added (Nov 4) |
 | M3 | Nov 4–5 | Attack demo: SoundHub + MegaDeals stores, LangGraph agent, injection blocked | Real-store integration merged (`aaf269b`); Windows anomaly-import fix merged (`1a182ad`); 54 agent tests pass. |
 | M4 | Nov 6–7 | Groq intent judge + XGBoost/SHAP anomaly model | Anomaly model v2 (`8cf1f50`) and Sahil's wiring (`820d249`) merged in `c0254f7`; 488 backend tests pass, 1 skipped. |
@@ -159,8 +159,8 @@ Ask Sahil for the shared sandbox values.
   and the Windows native-import fix (`1a182ad`) are merged. Backend 488 passed (1 skipped); agent 54
   passed; Ruff is clean. The Windows E2E passes in 8.13s using local SQLite and fake PayPal. Next
   planned work is the AG Grid console in `frontend/`.
-- Sahil + Claude: Render deploy of the backend with hosted MCP at `/mcp` (token `MCP_AUTH_TOKEN`), then
-  the hosted $1 test (sync 1); then Groq intent judge (`app/judge.py`) and step-up approvals (M5).
+- Sahil + Claude: Groq intent judge (`app/judge.py`), then step-up approvals (M5). Render deploy and
+  sync 1 are done (Nov 5).
 
 ## Next up
 - [x] Sahil: Python 3.12 via uv; Neon project `leash` (AWS us-east-1), `DATABASE_URL` in `.env`.
@@ -177,8 +177,8 @@ Ask Sahil for the shared sandbox values.
 - [x] Sahil: run migration `0002` and seed `m_demo` on Neon (Nov 3).
 - [x] Anurag: run the read-only setup checker against Neon; 5/5 checks passed with shared-key
       fingerprint `cd628e356acd` (Nov 5).
-- [ ] Sahil: run `uv run python -m scripts.check_setup` on your machine and on Render after deploy;
-      the key fingerprint must match Anurag's.
+- [x] Sahil: shared key confirmed on Render indirectly: hosted `m_demo` passes signature verification
+      and pays (Nov 5). Render's free tier has no shell, so `check_setup` was not run there.
 - [x] Sahil: orchestrator switch to `check_and_reserve` / `release_budget` / `append_audit`; payment row
       flushed first, mandate-before-audit lock order, UTC `now`, no floats, `DEMO_MANDATE` and
       `_usage()` removed (merged to `main` as `31dcdfb`, Nov 3).
@@ -219,14 +219,14 @@ Ask Sahil for the shared sandbox values.
       passed in 8.13s using the local SQLite/fake-PayPal harness (`1a182ad`).
 - [ ] Sahil: load native libraries (including judge dependencies) at module startup, not for the first
       time inside an MCP tool call; the Windows faulthandler dump showed the NumPy import blocking.
-- [ ] Sahil: after Render deploy, share `MCP_AUTH_TOKEN` by DM; Anurag sets
-      `AGENT_LEASH_URL=https://<service>.onrender.com/mcp` and `AGENT_LEASH_TOKEN`, then runs `attack`.
+- [x] Sahil: shared `MCP_AUTH_TOKEN` by DM. **Rotated on Nov 5 ~04:55 IST** (old value leaked in a
+      chat); Anurag must put the new value in `AGENT_LEASH_TOKEN`.
 - [ ] Sahil: write `risk_score` (string) and `judge` into the `payment.decided` audit payload when
       the model and judge run; the console reads them from there.
 - [ ] Sahil: when the intent judge lands, store its `score` as a string in the audit payload; the
       audit chain rejects floats.
-- [ ] Both: wake the Render service with `GET /health` before hosted-agent demos; free-tier cold
-      starts can exceed the HTTP MCP client's 30s timeout.
+- [x] Both: keep Render awake. cron-job.org hits `GET /health` every 10 min (Sahil's account), so the
+      free instance should not cold-start. Still hit `/health` once before a recorded demo.
 - [x] Anurag: run `uv run python -m leash_agent attack --standin` against Neon; Leash BLOCKED the
       injected cart, `/payments` showed it, and `/audit/verify` returned 12 valid entries (Nov 5).
 - [x] Anurag: retrain the anomaly model with realistic time-of-day and near-limit examples, add the
@@ -236,8 +236,28 @@ Ask Sahil for the shared sandbox values.
 - [ ] Anurag (Nov 5–6): AG Grid audit console in `frontend/` on top of the read routes.
 - [x] Anurag: hosted `attack` through Render `/mcp` with the bearer token: BLOCK (Nov 5).
 - [ ] Both: hosted `normal` together (real $179 sandbox charge) at sync 2, Nov 6 evening IST.
+      Note: `m_demo` now has $320 / 3 payments left after Sahil's hosted buy.
+- [ ] Sahil (minor): `list_mandates` should hide revoked/expired mandates (or sort active first) and
+      return `"currency": "USD"`; Claude Desktop listed the two old `m_pgtest_*` mandates.
 
 ## Log (newest first)
+
+### 2026-11-05 05:05 IST — Sahil + Claude
+- Render deploy (sync 1 done). Web Service `leash`, URL `https://leash-84h9.onrender.com`, region
+  Virginia (same as Neon), branch `main`, root dir `backend`, **free instance** (paid needs a card;
+  zero-spend rule). Build: `pip install uv && uv sync --frozen --no-dev`. Start:
+  `PYTHONPATH=.. uv run --frozen --no-dev uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
+  Health check `/health`; auto-deploy **after CI checks pass**; build filters `backend/**`,
+  `stores/**`. Env vars copied from `.env` (direct `DATABASE_URL`, not pooled).
+- Keep-awake: cron-job.org job hits `/health` every 10 min. Free tier is 750 h/month per workspace,
+  so Sahil's old house-price service on Render was suspended.
+- Hosted test from Claude Desktop (`leash-cloud` via `npx mcp-remote` + bearer header):
+  `list_mandates` ok; 1 × `sh-sony-xm5` from `soundhub` → ALLOW, CAPTURED, risk `0.040966`;
+  3 × `md-giftcard-100` from `megadeals` → BLOCK (`category_mismatch`, `merchant_not_allowed`,
+  `amount_exceeds_max_payment_amount`). `m_demo`: $320 / 3 payments left.
+- `MCP_AUTH_TOKEN` rotated on Render and in `.env` after the old value leaked in a chat. Anurag:
+  update `AGENT_LEASH_TOKEN` (new value by DM).
+- No code changes. Files: `CONTEXT.md`.
 
 ### 2026-11-05 04:48 IST — Anurag + Claude + Codex
 - Hosted check against Render: `/health` ok, `/mcp` 401 without token, agent attack -> BLOCK
