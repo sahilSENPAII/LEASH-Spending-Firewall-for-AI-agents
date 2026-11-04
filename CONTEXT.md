@@ -35,8 +35,8 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 | M0 | Oct 30–31 | Setup + 3 de-risking spikes | **Done** |
 | M1 | Oct 31–Nov 1 | Thin end-to-end flow + deploy: Claude pays $1 sandbox via hosted Leash | Local flow **done** (Claude Desktop paid $1 sandbox through the orchestrator); hosted deploy pending (Sahil, Render) |
 | M2 | Nov 2–3 | Mandates (Ed25519), policy engine, state machine, idempotency, saga, hash-chained audit | **Mostly done**: policy, signed mandates, budget holds, audit chain (Anurag); state machine, idempotency keys, void on capture failure (Sahil). Orchestrator switch to `check_and_reserve` / `release_budget` / `append_audit` and migration `0002` on Neon **done** (Nov 3). Budget lock proven on Neon under concurrency; saga reconcile added (Nov 4) |
-| M3 | Nov 4–5 | Attack demo: SoundHub + MegaDeals stores, LangGraph agent, injection blocked | Real-store agent integration merged into `main` as `aaf269b`; agent sends SKU/quantity only; 50 agent tests pass. |
-| M4 | Nov 6–7 | Groq intent judge + XGBoost/SHAP anomaly model | Anomaly model merged into `main` as `4abf400`; 24 tests included in 354 passing backend tests; orchestrator wiring pending Sahil |
+| M3 | Nov 4–5 | Attack demo: SoundHub + MegaDeals stores, LangGraph agent, injection blocked | Real-store integration merged (`aaf269b`); Windows anomaly-import fix merged (`1a182ad`); 54 agent tests pass. |
+| M4 | Nov 6–7 | Groq intent judge + XGBoost/SHAP anomaly model | Anomaly model v2 (`8cf1f50`) and Sahil's wiring (`820d249`) merged in `c0254f7`; 488 backend tests pass, 1 skipped. |
 | M5 | Nov 8 | Step-up approval via web page, survives restart | — |
 | M6 | Nov 9–10 | React frontend + AG Grid audit console. **Feature freeze Nov 10 23:59** | — |
 | M7 | Nov 11 | Hardening, README, demo video | — |
@@ -225,11 +225,17 @@ Ask Sahil for the shared sandbox values.
       injected cart, `/payments` showed it, and `/audit/verify` returned 12 valid entries (Nov 5).
 - [x] Anurag: retrain the anomaly model with realistic time-of-day and near-limit examples, add the
       72 hour-by-hour checks, and pin the agent E2E clock and thresholds (`8cf1f50`).
-- [ ] Sahil: merge anomaly wiring from `sahil` (`820d249`) now that model v2 is on `main`; thresholds
-      are STEP_UP at 0.5 and BLOCK at 0.9, with STEP_UP on risk-check errors.
+- [x] Sahil: merge anomaly wiring from `sahil` (`820d249`); merged into `main` in `c0254f7` with
+      model v2. Thresholds: STEP_UP at 0.5 and BLOCK at 0.9, with STEP_UP on risk-check errors.
 - [ ] Anurag (Nov 5–6): AG Grid audit console in `frontend/` on top of the read routes.
 
 ## Log (newest first)
+
+### 2026-11-05 04:29 IST — Anurag + Claude + Codex
+- Updated M3 and M4 milestone statuses: M3 now records 54 agent tests; M4 records anomaly model v2
+  and Sahil's wiring merged in `c0254f7`, with 488 backend tests passed and 1 skipped.
+- Ticked Sahil's anomaly-wiring merge in Next up.
+- Files: `CONTEXT.md`.
 
 ### 2026-11-05 04:20 IST — Anurag + Claude + Codex
 - Moved NumPy and XGBoost imports to `backend/app/anomaly.py` module scope so the stdio server loads
