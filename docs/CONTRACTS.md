@@ -266,8 +266,10 @@ Checked in this order. A later check can only make the outcome stricter (D2).
 | judge or model | raises or times out | **STEP_UP** |
 | all pass | | **ALLOW** |
 
-Thresholds come from settings and are agreed with the model on Nov 8. Until the judge and model
-land, their stubs return `match=True` and `score=0.0`.
+Thresholds come from `ANOMALY_STEP_UP_THRESHOLD` (default 0.5) and `ANOMALY_BLOCK_THRESHOLD` (default
+0.9), values 0..1; final values agreed Nov 8. A score outside 0..1 (NaN included) counts as a failed
+check. Reason codes: `anomaly_block`, `anomaly_step_up`, `anomaly_check_failed`. The judge is not built
+yet; until it is, only the model runs at this step.
 
 ### 5.3 Orchestrator call order (one `request_payment`)
 No database transaction is held open across a network call (judge, model, PayPal).
@@ -279,8 +281,11 @@ No database transaction is held open across a network call (judge, model, PayPal
    → `append_audit("payment.decided", {policy decision, reasons})`.
    - BLOCK: status `BLOCKED`, `append_audit("payment.blocked")`, commit, return BLOCK.
    - ALLOW: commit (row + hold + audit together).
-2. Outside a transaction: `judge_intent` and `score_anomaly` run in parallel, each with a timeout.
-3. **T2**: combine (5.2), `append_audit("payment.decided", {judge, risk_score, final decision})`.
+2. Outside a transaction: `build_features` (its own read-only session) then `score_anomaly`; the judge
+   will run here too. No timeout yet (scoring takes milliseconds).
+3. **T2**: combine (5.2), `append_audit("payment.decided", {decision, reasons, risk_score (6-decimal
+   string or null), anomaly_reasons, model_version})`. An allowed payment therefore has two
+   `payment.decided` entries; readers take the latest.
    - BLOCK: status `BLOCKED`, `release_budget`, `append_audit("payment.blocked")`, commit, return.
    - STEP_UP: status `AWAITING_APPROVAL`, `append_audit("approval.requested")`, commit, return
      STEP_UP. The hold stays.
@@ -320,13 +325,15 @@ transaction. Events:
   "decision": "ALLOW | STEP_UP | BLOCK",
   "status": "REQUESTED | BLOCKED | AWAITING_APPROVAL | AUTHORIZED | CAPTURED | VOIDED | FAILED | DENIED | EXPIRED",
   "reasons": [{"code": "merchant_not_allowed", "message": "...", "source": "policy | judge | anomaly | system"}],
-  "risk_score": 0.12,
+  "risk_score": "0.045706",
   "judge": {"match": true, "score": 0.05, "reason": "..."},
   "approval_url": "https://.../approvals/<payment_id> or null"
 }
 ```
 - `payment_id` is null only on an internal error (no row could be written).
-- `risk_score` and `judge` are null when that check did not run (policy BLOCK, or stub).
+- `risk_score` is a string (the audit chain refuses floats), or null when the model did not run or
+  failed. It is kept on PayPal failures after the model ran. `judge` and `approval_url` are null until
+  they exist.
 - Money in JSON is always a string (`"179.00"`), never a number.
 - `reasons` is empty on ALLOW.
 
@@ -334,8 +341,8 @@ transaction. Events:
 | Tool | Arguments | Returns |
 |---|---|---|
 | `request_payment` | `mandate_id`, `merchant_id`, `items: [{sku, quantity}]` | decision response (5.4) |
-| `list_mandates` | none | `[{mandate_id, intent, category, max_payment_amount, remaining_budget, remaining_count, expires_at, revoked}]` |
-| `get_payment_status` | `payment_id` | decision response (5.4) for that payment |
+| `list_mandates` | none | `{"mandates": [{mandate_id, intent, category, max_payment_amount, remaining_budget, remaining_count, expires_at, revoked}]}` |
+| `get_payment_status` | `payment_id` | the `GET /payments/{id}` view (5.4 plus mandate_id, merchant_id, amount, currency, items, created_at, updated_at); unknown ID is an MCP error result |
 
 - The agent sends SKUs and quantities only, never a price, amount or category. Leash prices each line
   from its catalog (`stores/catalog.json`, setting `CATALOG_PATH`), the same file the demo stores are
@@ -350,9 +357,16 @@ transaction. Events:
 - Demo stores: `python -m stores.serve` serves SoundHub on `:8101` and MegaDeals on `:8102`, built from
   the catalog. The MegaDeals `md-sony-xm5` page holds the hidden injection (3 × `md-giftcard-100`).
 - The agent never sees PayPal IDs or credentials.
+- `list_mandates` returns one object, not a bare list: FastMCP splits a list into one text block per
+  item. Money is a string, `expires_at` is UTC with `Z`, revoked and expired mandates are included.
+- Transports: stdio (`python -m app.mcp_server`) for Claude Desktop; streamable HTTP at `/mcp` on the
+  FastAPI app (stateless, JSON responses) for hosted agents. HTTP needs
+  `Authorization: Bearer <MCP_AUTH_TOKEN>`: 401 if the token is missing or wrong, 503 if
+  `MCP_AUTH_TOKEN` is unset. Clients read the result's JSON text block.
 
 ### 5.6 REST API (frontend-facing)
-Single demo user, no auth (hackathon scope; recorded as a limitation in the README).
+Single demo user, no auth (hackathon scope; recorded as a limitation in the README). `/mcp` is the
+MCP endpoint (5.5, bearer token), not a REST route.
 
 | Method + path | Body / query | Returns |
 |---|---|---|
@@ -388,8 +402,9 @@ Read routes landed (Anurag, Nov 5; `backend/app/read_api.py`, all read-only):
 | `CATALOG_PATH` | empty = `stores/catalog.json` | `app/catalog.py` |
 | `JUDGE_MODEL` | `groq/llama-3.3-70b-versatile` | `judge_intent` |
 | `JUDGE_TIMEOUT_SECONDS` | `5` | orchestrator |
-| `ANOMALY_STEP_UP_THRESHOLD` | agreed Nov 8 | orchestrator |
-| `ANOMALY_BLOCK_THRESHOLD` | agreed Nov 8 | orchestrator |
+| `ANOMALY_STEP_UP_THRESHOLD` | `0.5` (final Nov 8) | orchestrator |
+| `ANOMALY_BLOCK_THRESHOLD` | `0.9` (final Nov 8) | orchestrator |
+| `MCP_AUTH_TOKEN` | empty = `/mcp` off (503) | `app/mcp_server.py` |
 | `APPROVAL_TTL_SECONDS` | `900` | approvals expiry job |
 
 ## Open questions (answered Nov 2)
