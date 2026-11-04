@@ -111,6 +111,8 @@ Ask Sahil for the shared sandbox values.
 - Anurag + Claude + Codex: the attack agent is merged into `main` as `3be8391`; its tests and Ruff pass. Neon setup verification is still pending until `DATABASE_URL` is added to the ignored local `.env`.
 - Sahil: wire `build_features` and `score_anomaly` into the allowed-payment path using a read-only
   session. Suggested thresholds: STEP_UP at 0.5 and BLOCK at 0.9; any scoring error -> STEP_UP.
+- Anurag + Claude + Codex: apply the review fixes on `anurag` for real-store page parsing/loading,
+  per-cart failure handling, setup-check migration detection, MCP cleanup, and the race-test key fixture.
 - Sahil + Claude: next is `request_payment(mandate_id, merchant_id, items=[{sku, quantity}])` with a
   shared server-side catalog and the demo stores (SoundHub :8101, MegaDeals :8102); then HTTP MCP
   transport + `list_mandates` / `get_payment_status`, Render deploy, Groq intent judge (`app/judge.py`).
@@ -166,6 +168,11 @@ Ask Sahil for the shared sandbox values.
 - [ ] Anurag (Nov 5–6): AG Grid audit console (needs `GET /audit` and `GET /payments`).
 
 ## Log (newest first)
+
+### 2026-11-05 00:16 IST — Anurag + Claude + Codex
+- Claimed the review fixes for agent store-page reliability, cart error handling, setup-check migration
+  detection, MCP cleanup, and the Postgres race-test key fixture.
+- Files: `CONTEXT.md`.
 
 ### 2026-11-04 23:50 IST — Anurag + Claude + Codex
 - Set the attribution for Anurag's Context entries to `Anurag + Claude + Codex` and corrected the
