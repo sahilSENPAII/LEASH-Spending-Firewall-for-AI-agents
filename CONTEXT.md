@@ -34,7 +34,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 | M0 | Oct 30–31 | Setup + 3 de-risking spikes | **Done** |
 | M1 | Oct 31–Nov 1 | Thin end-to-end flow + deploy: Claude pays $1 sandbox via hosted Leash | Local flow **done** (Claude Desktop paid $1 sandbox through the orchestrator); hosted deploy pending (Sahil, Render) |
 | M2 | Nov 2–3 | Mandates (Ed25519), policy engine, state machine, idempotency, saga, hash-chained audit | **Mostly done**: policy, signed mandates, budget holds, audit chain (Anurag); state machine, idempotency keys, void on capture failure (Sahil). Orchestrator switch to `check_and_reserve` / `release_budget` / `append_audit` and migration `0002` on Neon **done** (Nov 3). Budget lock proven on Neon under concurrency; saga reconcile added (Nov 4) |
-| M3 | Nov 4–5 | Attack demo: SoundHub + MegaDeals stores, LangGraph agent, injection blocked | Agent implemented on local `anurag` (`5372fa2`); agent checks pending, not pushed or merged |
+| M3 | Nov 4–5 | Attack demo: SoundHub + MegaDeals stores, LangGraph agent, injection blocked | Agent pushed to `anurag` (`5372fa2`); 45 agent tests pass, pending merge |
 | M4 | Nov 6–7 | Groq intent judge + XGBoost/SHAP anomaly model | — |
 | M5 | Nov 8 | Step-up approval via web page, survives restart | — |
 | M6 | Nov 9–10 | React frontend + AG Grid audit console. **Feature freeze Nov 10 23:59** | — |
@@ -83,11 +83,12 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
   chain validity; it never writes. Anurag's Neon check is pending because `DATABASE_URL` is not set in
   the local `.env`. Public-key fingerprint: `3c914ba04924`. The current suite has 287 passing tests.
 
-- LangGraph attack agent is implemented in `agent/` and committed locally on `anurag` as `5372fa2`.
-  It uses Playwright, scripted or Groq planning, stand-in stores, and Leash's MCP payment tool; D14
-  records the design. The agent suite is pending because Python 3.12, its dependencies, and Chromium
-  are not installed. Backend tests pass (330 passed, 1 skipped); Ruff passes for the agent and the
-  changed MCP server. The code commit has not been pushed or merged.
+- LangGraph attack agent is implemented in `agent/` and pushed to `anurag` as `5372fa2`. It uses
+  Playwright, scripted or Groq planning, stand-in stores, and Leash's MCP payment tool; D14 records
+  the design. All 45 agent tests pass, including browser and backend end-to-end tests. Agent Ruff
+  passes; backend tests pass (330 passed, 1 skipped), and Ruff passes for the changed MCP server.
+  The stand-in attack dry-run planned the gift-card injection and sent no payment. The branch is not
+  merged.
 
 ## Env vars (names only — values live in each person's local `.env`)
 `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_BASE_URL`, `SANDBOX_BUYER_EMAIL`,
@@ -99,7 +100,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Codex: attack-agent commit `5372fa2` is on the local `anurag` branch. Backend tests and Ruff pass; agent tests await Python 3.12, agent dependencies, and Chromium. The branch is not pushed or merged. Neon setup verification is still pending until `DATABASE_URL` is added to the ignored local `.env`.
+- Anurag + Codex: attack-agent commit `5372fa2` is pushed to `anurag`; its tests and Ruff pass. It is pending review/merge. Neon setup verification is still pending until `DATABASE_URL` is added to the ignored local `.env`.
 - Sahil + Claude: next is `request_payment(mandate_id, merchant_id, items=[{sku, quantity}])` with a
   shared server-side catalog and the demo stores (SoundHub :8101, MegaDeals :8102); then HTTP MCP
   transport + `list_mandates` / `get_payment_status`, Render deploy, Groq intent judge (`app/judge.py`).
@@ -144,10 +145,17 @@ Ask Sahil for the shared sandbox values.
       (merged into `main` from `sahil`).
 - [x] Sahil: MCP `request_payment` + orchestrator (merged into `main` from `sahil`).
 - [ ] Sahil: MCP `list_mandates` / `get_payment_status`.
-- [ ] Anurag: run the agent tests with Python 3.12 and Chromium, then push the attack-agent commit
-      on `anurag` and send it through review. Do not run `normal` against Neon without Sahil.
+- [ ] Both: review and merge the attack-agent commit from `anurag`. Then point the agent at Sahil's
+      real stores when available; do not run `normal` against Neon without Sahil.
 
 ## Log (newest first)
+
+### 2026-11-04 23:23 IST — Anurag + Codex
+- Installed Python 3.12.14, agent dependencies, and Playwright Chromium after approval.
+- Agent suite: 45 passed; agent Ruff clean. Backend suite: 330 passed, 1 skipped; backend MCP Ruff
+  clean. `attack --standin --dry-run` showed the injected gift-card request and sent no payment.
+- Pushed `5372fa2` to `origin/anurag`. It is not merged to `main` yet.
+- Files: no code changes after `5372fa2`; `CONTEXT.md` records verification and branch status.
 
 ### 2026-11-04 23:16 IST — Anurag + Codex
 - Applied the LangGraph attack-agent patch as one commit on local `anurag` (`5372fa2`, 35 files):
