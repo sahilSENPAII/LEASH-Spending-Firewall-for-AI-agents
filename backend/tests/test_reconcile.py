@@ -5,6 +5,7 @@ import pytest
 from sqlalchemy import select, update
 
 from app import mandates, orchestrator, reconcile
+from app.anomaly import AnomalyResult
 from app.audit import verify_chain
 from app.config import Settings
 from app.mandates import (
@@ -533,7 +534,10 @@ async def _crash_when_moving_to(monkeypatch, target):
     monkeypatch.setattr(orchestrator, "_move", move)
 
 
-async def _pay(sessions, paypal):
+async def _pay(sessions, paypal, monkeypatch):
+    # A low risk score, so these tests do not depend on the anomaly model.
+    low = AnomalyResult(score=0.05, reasons=(), model_version="test")
+    monkeypatch.setattr(orchestrator, "score_anomaly", lambda features: low)
     return await orchestrator.request_payment(
         sessions,
         paypal,
@@ -553,7 +557,7 @@ async def _only_payment(sessions):
 async def test_saga_gap_after_capture_ends_captured(sessions, monkeypatch):
     await _crash_when_moving_to(monkeypatch, S.CAPTURED)
     paypal = FakePayPal(status="CAPTURED")
-    assert (await _pay(sessions, paypal))["decision"] == "BLOCK"
+    assert (await _pay(sessions, paypal, monkeypatch))["decision"] == "BLOCK"
     stuck = await _only_payment(sessions)
     assert stuck.status == S.AUTHORIZED
     await _set_age(sessions, stuck.id, timedelta(minutes=30))
@@ -565,6 +569,7 @@ async def test_saga_gap_after_capture_ends_captured(sessions, monkeypatch):
     assert payment.status == S.CAPTURED and hold.released_at is None
     assert [e.event_type for e in events] == [
         "payment.decided",
+        "payment.decided",
         "payment.authorized",
         "payment.reconciled_captured",
     ]
@@ -573,7 +578,7 @@ async def test_saga_gap_after_capture_ends_captured(sessions, monkeypatch):
 async def test_saga_gap_after_authorize_ends_voided(sessions, monkeypatch):
     await _crash_when_moving_to(monkeypatch, S.AUTHORIZED)
     paypal = FakePayPal(status="CREATED", lookup=OrderLookup("O-1", "A-1", created=False))
-    assert (await _pay(sessions, paypal))["decision"] == "BLOCK"
+    assert (await _pay(sessions, paypal, monkeypatch))["decision"] == "BLOCK"
     stuck = await _only_payment(sessions)
     assert stuck.status == S.REQUESTED and stuck.paypal_authorization_id is None
     await _set_age(sessions, stuck.id, timedelta(minutes=30))
@@ -585,6 +590,7 @@ async def test_saga_gap_after_authorize_ends_voided(sessions, monkeypatch):
     assert payment.status == S.VOIDED and hold.released_at is not None
     assert record.budget_used == Decimal("0") and record.payment_count == 0
     assert [e.event_type for e in events] == [
+        "payment.decided",
         "payment.decided",
         "payment.reconciled_lookup",
         "payment.reconciled_authorized",
