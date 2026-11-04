@@ -81,9 +81,8 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1â
 
 - Read-only setup checker: `cd backend && uv run python -m scripts.check_setup` reports database
   reachability, a shareable signing-key fingerprint, the current migration, `m_demo` signature, and
-  audit-chain validity; it never writes. Neon verification is pending: the local `.env` has no
-  `DATABASE_URL`, and its signing-key fingerprint (`3c914ba04924`) differs from the shared-key
-  fingerprint Sahil provided (`cd628e356acd`). Do not use the local key for Neon.
+  audit-chain validity; it never writes. Neon check passed 5/5 on Anurag's machine with the shared-key
+  fingerprint `cd628e356acd` (Nov 5).
 
 - Read-only console APIs are merged into `main` as `783a1ed`: `GET /payments`,
   `GET /payments/{id}`, paged `GET /audit`, and `GET /audit/verify` in `backend/app/read_api.py`.
@@ -130,10 +129,10 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1â
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Claude + Codex: read-only payment/audit APIs are merged into `main` as `783a1ed`; next is
-  the AG Grid console in `frontend/`. Neon verification remains pending because `DATABASE_URL` is
-  absent locally and the local key fingerprint does not match Sahil's shared-key fingerprint. The
-  stand-in attack dry-run also remains pending the Playwright Node driver memory issue.
+- Anurag + Claude + Codex: read-only payment/audit APIs are merged into `main` as `783a1ed`; Neon
+  check passed 5/5 on Anurag's machine with shared-key fingerprint `cd628e356acd`. Next is the AG Grid
+  console in `frontend/`. The stand-in attack dry-run remains pending the Playwright Node driver
+  memory issue.
 - Sahil + Claude: next is `request_payment(mandate_id, merchant_id, items=[{sku, quantity}])` with a
   shared server-side catalog and the demo stores (SoundHub :8101, MegaDeals :8102); then HTTP MCP
   transport + `list_mandates` / `get_payment_status`, Render deploy, Groq intent judge (`app/judge.py`).
@@ -151,8 +150,8 @@ Ask Sahil for the shared sandbox values.
 - [x] Anurag: hash-chained audit log + `/audit/verify` (merged into `main` as `88bf54c`).
 - [x] Both: agree on one shared `MANDATE_SIGNING_KEY` for the Neon database (shared by DM) and choose who runs migration `0002` (Sahil).
 - [x] Sahil: run migration `0002` and seed `m_demo` on Neon (Nov 3).
-- [ ] Anurag: replace the local signing key with Sahil's shared key, add `DATABASE_URL` from Sahil to
-      the ignored local `.env`, and run the checker against Neon; expect 5/5 checks.
+- [x] Anurag: run the read-only setup checker against Neon; 5/5 checks passed with shared-key
+      fingerprint `cd628e356acd` (Nov 5).
 - [ ] Sahil: run `uv run python -m scripts.check_setup` on your machine and on Render after deploy;
       the key fingerprint must match Anurag's.
 - [x] Sahil: orchestrator switch to `check_and_reserve` / `release_budget` / `append_audit`; payment row
@@ -202,6 +201,12 @@ Ask Sahil for the shared sandbox values.
 - [ ] Anurag (Nov 5â€“6): AG Grid audit console in `frontend/` on top of the read routes.
 
 ## Log (newest first)
+
+### 2026-11-05 01:36 IST â€” Anurag + Claude + Codex
+- Verified Neon from Anurag's machine: 5/5 checks passed; database reachable, shared signing-key
+  fingerprint `cd628e356acd`, migration `0002`, `m_demo` signature valid, and all 10 audit entries
+  verified.
+- Files: `CONTEXT.md`.
 
 ### 2026-11-05 01:24 IST â€” Anurag + Claude + Codex
 - Added read-only payment and audit routes, CORS configuration, the backend Python 3.12 pin, contract
