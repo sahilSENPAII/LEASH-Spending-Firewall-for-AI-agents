@@ -137,6 +137,12 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
   velocity thresholds explicitly. Current backend suite: 464 passed, 1 skipped; agent suite: 52 passed;
   Ruff passes in both. Sahil's anomaly wiring remains on `origin/sahil` (`820d249`).
 
+- Hosted run (Nov 5): Render [`https://leash-84h9.onrender.com`](https://leash-84h9.onrender.com) is
+  up (`/health` ok, db ok); `/mcp` returns 401 without the bearer token. Anurag's agent, configured
+  with `AGENT_LEASH_URL` and `AGENT_LEASH_TOKEN`, ran `attack` against hosted Leash on Neon: BLOCK
+  (`mixed_categories`); `/audit/verify` is ok (18 entries). The repo records the Render URL, never
+  the token.
+
 ## Env vars (names only — values live in each person's local `.env`)
 `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_BASE_URL`, `SANDBOX_BUYER_EMAIL`,
 `MERCHANT_SOUNDHUB_EMAIL`, `MERCHANT_MEGADEALS_EMAIL`, `PLATFORM_MERCHANT_EMAIL`, `GROQ_API_KEY`,
@@ -187,7 +193,7 @@ Ask Sahil for the shared sandbox values.
       `docs/CONTRACTS.md` section 5.5.
 - [x] Sahil: shared-catalog SoundHub and MegaDeals demo stores with hidden injection, merged in
       `b8690bb`.
-- [ ] Sahil (~Nov 5): Render deploy with HTTP MCP at `https://<service>.onrender.com/mcp`.
+- [x] Sahil (~Nov 5): Render deploy with HTTP MCP at `https://<service>.onrender.com/mcp`.
 - [x] Sahil: update the `docs/CONTRACTS.md` app paths.
 - [x] Sahil: rename `payment.error` to `payment.failed`.
 - [x] M1 backend skeleton: FastAPI app + settings, Postgres models + Alembic, PayPal client, CI
@@ -228,8 +234,15 @@ Ask Sahil for the shared sandbox values.
 - [x] Sahil: merge anomaly wiring from `sahil` (`820d249`); merged into `main` in `c0254f7` with
       model v2. Thresholds: STEP_UP at 0.5 and BLOCK at 0.9, with STEP_UP on risk-check errors.
 - [ ] Anurag (Nov 5–6): AG Grid audit console in `frontend/` on top of the read routes.
+- [x] Anurag: hosted `attack` through Render `/mcp` with the bearer token: BLOCK (Nov 5).
+- [ ] Both: hosted `normal` together (real $179 sandbox charge) at sync 2, Nov 6 evening IST.
 
 ## Log (newest first)
+
+### 2026-11-05 04:48 IST — Anurag + Claude + Codex
+- Hosted check against Render: `/health` ok, `/mcp` 401 without token, agent attack -> BLOCK
+  (`mixed_categories`) through hosted Leash on Neon, `/audit/verify` ok (18 entries). No code changes.
+- Files: `CONTEXT.md`.
 
 ### 2026-11-05 04:29 IST — Anurag + Claude + Codex
 - Updated M3 and M4 milestone statuses: M3 now records 54 agent tests; M4 records anomaly model v2
