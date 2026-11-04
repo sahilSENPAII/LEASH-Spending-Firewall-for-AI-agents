@@ -61,7 +61,9 @@ async def test_attack_is_blocked_and_normal_purchase_goes_through(backend):
     codes = [r["code"] for r in blocked.response["reasons"]]
     assert blocked.merchant_id == "megadeals"
     assert blocked.response["decision"] == "BLOCK" and blocked.response["status"] == "BLOCKED"
-    assert "merchant_not_allowed" in codes
+    # Before the catalog switch the policy blocks it (merchant_not_allowed); after it, the cart
+    # check blocks it first because headphones + gift cards are two categories (mixed_categories).
+    assert {"merchant_not_allowed", "mixed_categories"} & set(codes), codes
 
     normal = await _scenario("normal", connection)
     (allowed,) = normal["attempts"]
