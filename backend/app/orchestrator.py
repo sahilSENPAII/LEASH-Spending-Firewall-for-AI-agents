@@ -2,13 +2,14 @@
 recorded in Postgres.
 
 Leash prices every item from its own catalog (app.catalog); the agent sends no price or amount.
-After the policy ALLOW, the anomaly model (app.anomaly) can still turn it into STEP_UP or BLOCK.
-Every request ends in ALLOW, STEP_UP or BLOCK. Any error is a BLOCK, except an error in the risk
-check, which is a STEP_UP (D3).
+After the policy ALLOW, the intent judge (app.judge) and the anomaly model (app.anomaly) run in
+parallel and can still turn it into STEP_UP or BLOCK. Every request ends in ALLOW, STEP_UP or BLOCK.
+Any error is a BLOCK, except an error in the judge or the risk check, which is a STEP_UP (D3).
 Call order and release points follow docs/CONTRACTS.md section 5.3. Status changes go through
 `app.state.transition`, and each one writes an audit event through `append_audit`.
 """
 
+import asyncio
 import json
 import logging
 from datetime import UTC, datetime
@@ -17,9 +18,17 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.anomaly import AnomalyResult, build_features, score_anomaly
 from app.audit import append_audit
-from app.catalog import get_catalog, price_cart
+from app.catalog import Cart, Product, get_catalog, price_cart
 from app.config import Settings, get_settings
-from app.mandates import check_and_reserve, release_budget
+from app.judge import Cart as JudgeCart
+from app.judge import CartItem, JudgeResult, judge_intent
+from app.mandates import (
+    MandateRecord,
+    check_and_reserve,
+    get_mandate,
+    release_budget,
+    verify_mandate,
+)
 from app.models import Payment
 from app.paypal import PayPalClient
 from app.policy import PaymentRequest
@@ -34,10 +43,18 @@ ANOMALY_FAILED = {
     "code": "anomaly_check_failed",
     "message": "The risk check did not complete, so a person must approve this payment.",
 }
+JUDGE_FAILED = {
+    "code": "intent_check_failed",
+    "message": "The intent check did not complete, so a person must approve this payment.",
+}
 
 
 def _response(
-    payment: Payment | None, decision: str, reasons: list[dict], risk_score: str | None = None
+    payment: Payment | None,
+    decision: str,
+    reasons: list[dict],
+    risk_score: str | None = None,
+    judge: dict | None = None,
 ) -> dict:
     return {
         "payment_id": payment.id if payment else None,
@@ -45,6 +62,8 @@ def _response(
         "status": payment.status if payment else None,
         "reasons": reasons,
         "risk_score": risk_score,
+        "judge": judge,
+        "approval_url": None,
     }
 
 
@@ -91,7 +110,8 @@ async def _decide_and_pay(
     now: datetime,
 ) -> dict:
     settings = get_settings()
-    cart = price_cart(get_catalog(), merchant_id, items)
+    products = get_catalog()
+    cart = price_cart(products, merchant_id, items)
     payment = Payment(
         mandate_id=mandate_id,
         merchant_id=merchant_id,
@@ -144,14 +164,19 @@ async def _decide_and_pay(
         await session.commit()
         return _response(payment, "BLOCK", reasons)
 
+    # check_and_reserve loaded this row, so this reads no database; the judge needs the intent.
+    record = await get_mandate(session, mandate_id)
     # Record the ALLOW and its budget hold before any money moves.
     await session.commit()
 
-    # 5.3 step 2, with no transaction open. The intent judge (app/judge.py, not built yet) belongs
-    # here, run alongside the model; its result then goes into _combine (5.2).
-    risk = await _score_risk(sessions, payment, now, settings.velocity_window_seconds)
-    outcome, reasons = _combine(risk, settings)
+    # 5.3 step 2, with no transaction open: the judge and the model run at the same time.
+    judged, risk = await asyncio.gather(
+        _judge(payment, record, products, cart),
+        _score_risk(sessions, payment, now, settings.velocity_window_seconds),
+    )
+    outcome, reasons = _combine(judged, risk, settings)
     risk_score = None if risk is None else f"{risk.score:.6f}"
+    judge = None if judged is None else _judge_view(judged)
     payment.decision = outcome
     payment.reasons = reasons
     if outcome == "BLOCK":
@@ -167,20 +192,21 @@ async def _decide_and_pay(
             "risk_score": risk_score,
             "anomaly_reasons": list(risk.reasons) if risk else [],
             "model_version": risk.model_version if risk else None,
+            "judge": judge,
         },
         now=now,
     )
     if outcome == "BLOCK":
         await _move(session, payment, PaymentStatus.BLOCKED, now)
         await session.commit()
-        return _response(payment, "BLOCK", reasons, risk_score)
+        return _response(payment, "BLOCK", reasons, risk_score, judge)
     if outcome == "STEP_UP":
         # The hold stays until a person approves or denies (M5).
         await _move(
             session, payment, PaymentStatus.AWAITING_APPROVAL, now, event_type="approval.requested"
         )
         await session.commit()
-        return _response(payment, "STEP_UP", reasons, risk_score)
+        return _response(payment, "STEP_UP", reasons, risk_score, judge)
     await session.commit()
 
     try:
@@ -197,7 +223,7 @@ async def _decide_and_pay(
     except Exception:
         log.exception("authorize failed for payment %s", payment.id)
         return await _fail(
-            session, payment, PaymentStatus.FAILED, AUTHORIZE_FAILED, now, risk_score
+            session, payment, PaymentStatus.FAILED, AUTHORIZE_FAILED, now, risk_score, judge
         )
 
     payment.paypal_order_id = auth.order_id
@@ -216,12 +242,61 @@ async def _decide_and_pay(
         except Exception:
             # The hold stays AUTHORIZED and keeps counting against the budget.
             log.exception("void failed for payment %s", payment.id)
-            return await _fail(session, payment, None, CAPTURE_FAILED, now, risk_score)
-        return await _fail(session, payment, PaymentStatus.VOIDED, CAPTURE_FAILED, now, risk_score)
+            return await _fail(session, payment, None, CAPTURE_FAILED, now, risk_score, judge)
+        return await _fail(
+            session, payment, PaymentStatus.VOIDED, CAPTURE_FAILED, now, risk_score, judge
+        )
 
     await _move(session, payment, PaymentStatus.CAPTURED, now, capture_status=status)
     await session.commit()
-    return _response(payment, "ALLOW", [], risk_score)
+    return _response(payment, "ALLOW", [], risk_score, judge)
+
+
+def _judge_cart(products: dict[str, Product], merchant_id: str, cart: Cart) -> JudgeCart:
+    # Names come from the catalog, so the judge never reads text the agent wrote.
+    return JudgeCart(
+        merchant_id=merchant_id,
+        items=tuple(
+            CartItem(
+                name=products[line["sku"]].name,
+                quantity=line["quantity"],
+                unit_price=products[line["sku"]].price,
+            )
+            for line in cart.lines
+        ),
+        total=cart.amount,
+    )
+
+
+async def _judge(
+    payment: Payment, record: MandateRecord | None, products: dict[str, Product], cart: Cart
+) -> JudgeResult | None:
+    """The judge's verdict, or None if it could not be reached (the caller then uses STEP_UP)."""
+    try:
+        mandate = None if record is None else verify_mandate(record).mandate
+        if mandate is None:
+            raise ValueError(f"mandate {payment.mandate_id!r} did not verify")
+        judged = await judge_intent(
+            intent=record.terms.intent,
+            mandate=mandate,
+            cart=_judge_cart(products, payment.merchant_id, cart),
+        )
+        if not 0.0 <= judged.score <= 1.0:  # also catches NaN
+            raise ValueError(f"judge score {judged.score} is outside 0..1")
+        return judged
+    except Exception:
+        log.exception("intent judge failed for payment %s", payment.id)
+        return None
+
+
+def _judge_view(judged: JudgeResult) -> dict:
+    # A string score, like risk_score: canonical JSON (the audit chain) refuses floats.
+    return {
+        "match": judged.match,
+        "score": f"{judged.score:.6f}",
+        "reason": judged.reason,
+        "model": judged.model,
+    }
 
 
 async def _score_risk(
@@ -249,17 +324,28 @@ async def _score_risk(
         return None
 
 
-def _combine(risk: AnomalyResult | None, settings: Settings) -> tuple[str, list[dict]]:
-    """CONTRACTS 5.2 after a policy ALLOW: the model can only make the outcome stricter (D2)."""
+def _combine(
+    judged: JudgeResult | None, risk: AnomalyResult | None, settings: Settings
+) -> tuple[str, list[dict]]:
+    """CONTRACTS 5.2 after a policy ALLOW: the judge and the model only make it stricter (D2).
+
+    Anomaly BLOCK wins over any STEP_UP. Every STEP_UP reason is kept, so the approver sees all.
+    """
+    if risk is not None:
+        message = f"Risk score {risk.score:.2f}"
+        message += f": {'; '.join(risk.reasons)}." if risk.reasons else "."
+        if risk.score >= settings.anomaly_block_threshold:
+            return "BLOCK", [{"code": "anomaly_block", "message": message}]
+    reasons = []
+    if judged is None:
+        reasons.append(JUDGE_FAILED)
+    elif not judged.match:
+        reasons.append({"code": "intent_mismatch", "message": f"Intent check: {judged.reason}"})
     if risk is None:
-        return "STEP_UP", [ANOMALY_FAILED]
-    message = f"Risk score {risk.score:.2f}"
-    message += f": {'; '.join(risk.reasons)}." if risk.reasons else "."
-    if risk.score >= settings.anomaly_block_threshold:
-        return "BLOCK", [{"code": "anomaly_block", "message": message}]
-    if risk.score >= settings.anomaly_step_up_threshold:
-        return "STEP_UP", [{"code": "anomaly_step_up", "message": message}]
-    return "ALLOW", []
+        reasons.append(ANOMALY_FAILED)
+    elif risk.score >= settings.anomaly_step_up_threshold:
+        reasons.append({"code": "anomaly_step_up", "message": message})
+    return ("STEP_UP" if reasons else "ALLOW"), reasons
 
 
 async def _move(
@@ -287,6 +373,7 @@ async def _fail(
     reason: dict,
     now: datetime,
     risk_score: str | None,
+    judge: dict | None,
 ) -> dict:
     payment.decision = "BLOCK"
     payment.reasons = [reason]
@@ -303,4 +390,4 @@ async def _fail(
         await release_budget(session, payment_id=payment.id, now=now)
         await _move(session, payment, target, now, **reason)
     await session.commit()
-    return _response(payment, "BLOCK", [reason], risk_score)
+    return _response(payment, "BLOCK", [reason], risk_score, judge)

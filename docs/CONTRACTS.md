@@ -230,7 +230,7 @@ async def judge_intent(*, intent: str, mandate: policy.Mandate, cart: Cart) -> J
 ```python
 @dataclass(frozen=True)
 class CartItem:
-    name: str                 # from the store's own record, not the agent's text
+    name: str                 # from Leash's catalog, never the agent's text
     quantity: int
     unit_price: Decimal
 
@@ -245,13 +245,24 @@ class JudgeResult:
     match: bool               # True = the cart fits what the user asked for
     score: float              # 0.0 (clear match) .. 1.0 (clear mismatch)
     reason: str               # one short human-readable sentence
-    model: str                # e.g. "groq/llama-3.3-70b-versatile"
+    model: str                # e.g. "llama-3.3-70b-versatile"
 ```
-- Groq via LiteLLM, JSON output validated against the schema (D7). Timeout 5 s, one retry.
-- The mandate intent is trusted. Cart and page text are untrusted: passed as clearly labelled data,
-  never as instructions, and never shown the agent's conversation.
-- Raises on timeout, bad JSON or provider error. The orchestrator turns that into STEP_UP (D3).
+- Groq (D7): httpx `POST {JUDGE_BASE_URL}/chat/completions` with `Authorization: Bearer
+  <GROQ_API_KEY>`, model `JUDGE_MODEL`, temperature 0, `response_format: json_object`. Any
+  OpenAI-compatible endpoint works by config. The model's reply must be exactly
+  `{match: bool, score: number 0..1, reason: non-empty string of at most 300 chars}` (Pydantic,
+  strict: no extra keys, no `"true"` or `"0.1"` strings, no NaN).
+- Timeout `JUDGE_TIMEOUT_SECONDS` (5 s) per attempt, and one retry after any failure, so at most
+  two calls (about 10 s).
+- The mandate intent and limits (category, max per payment) are trusted. The cart (merchant, item
+  names, quantities, prices, total) is sent as JSON inside `<cart_data>...</cart_data>`, with `<` and
+  `>` escaped so a name cannot close the block. The system prompt says the block is data, never
+  instructions. Page text and the agent's conversation are never sent.
+- Raises on a missing `GROQ_API_KEY` (no call made), timeout, bad JSON or provider error. The
+  orchestrator turns that into STEP_UP (D3).
 - `intent` is the user's own words ("Sony or Bose noise-cancelling headphones"). See open question A.
+- An HTTP error, a body that is not JSON or has no `choices`, and a timeout all count as failures.
+- `scripts/smoke_judge.py` calls real Groq twice (a matching and a mismatching cart).
 
 ### 5.2 How the checks combine
 Checked in this order. A later check can only make the outcome stricter (D2).
@@ -268,8 +279,11 @@ Checked in this order. A later check can only make the outcome stricter (D2).
 
 Thresholds come from `ANOMALY_STEP_UP_THRESHOLD` (default 0.5) and `ANOMALY_BLOCK_THRESHOLD` (default
 0.9), values 0..1; final values agreed Nov 8. A score outside 0..1 (NaN included) counts as a failed
-check. Reason codes: `anomaly_block`, `anomaly_step_up`, `anomaly_check_failed`. The judge is not built
-yet; until it is, only the model runs at this step.
+check. Reason codes: `anomaly_block`, `anomaly_step_up`, `anomaly_check_failed`, `intent_mismatch`
+(its message includes the judge's reason) and `intent_check_failed`. Only `match` decides; the judge's
+`score` is recorded but not compared with a threshold. An anomaly BLOCK has only `anomaly_block` as its
+reason. A STEP_UP lists every STEP_UP reason (for example `intent_mismatch` and `anomaly_step_up`), so
+the approver sees all of them.
 
 ### 5.3 Orchestrator call order (one `request_payment`)
 No database transaction is held open across a network call (judge, model, PayPal).
@@ -281,10 +295,13 @@ No database transaction is held open across a network call (judge, model, PayPal
    → `append_audit("payment.decided", {policy decision, reasons})`.
    - BLOCK: status `BLOCKED`, `append_audit("payment.blocked")`, commit, return BLOCK.
    - ALLOW: commit (row + hold + audit together).
-2. Outside a transaction: `build_features` (its own read-only session) then `score_anomaly`; the judge
-   will run here too. No timeout yet (scoring takes milliseconds).
+2. Outside a transaction, at the same time (`asyncio.gather`, each with its own error handling):
+   `judge_intent` (mandate read in T1 from the already loaded row, item names from the catalog) and
+   `build_features` (its own read-only session) then `score_anomaly`. No timeout on the model yet
+   (scoring takes milliseconds).
 3. **T2**: combine (5.2), `append_audit("payment.decided", {decision, reasons, risk_score (6-decimal
-   string or null), anomaly_reasons, model_version})`. An allowed payment therefore has two
+   string or null), anomaly_reasons, model_version, judge})`. `judge` is `{match, score (6-decimal
+   string), reason, model}`, or null if the judge failed. An allowed payment therefore has two
    `payment.decided` entries; readers take the latest.
    - BLOCK: status `BLOCKED`, `release_budget`, `append_audit("payment.blocked")`, commit, return.
    - STEP_UP: status `AWAITING_APPROVAL`, `append_audit("approval.requested")`, commit, return
@@ -326,14 +343,16 @@ transaction. Events:
   "status": "REQUESTED | BLOCKED | AWAITING_APPROVAL | AUTHORIZED | CAPTURED | VOIDED | FAILED | DENIED | EXPIRED",
   "reasons": [{"code": "merchant_not_allowed", "message": "...", "source": "policy | judge | anomaly | system"}],
   "risk_score": "0.045706",
-  "judge": {"match": true, "score": 0.05, "reason": "..."},
+  "judge": {"match": true, "score": "0.050000", "reason": "...", "model": "llama-3.3-70b-versatile"},
   "approval_url": "https://.../approvals/<payment_id> or null"
 }
 ```
 - `payment_id` is null only on an internal error (no row could be written).
 - `risk_score` is a string (the audit chain refuses floats), or null when the model did not run or
-  failed. It is kept on PayPal failures after the model ran. `judge` and `approval_url` are null until
-  they exist.
+  failed. `judge` is null when the judge did not run (cart or policy BLOCK) or failed; its `score` is
+  a 6-decimal string for the same reason. Both are kept on PayPal failures after they ran.
+  `approval_url` is null until approvals exist (M5). `request_payment` and `get_payment_status`
+  return all these keys.
 - Money in JSON is always a string (`"179.00"`), never a number.
 - `reasons` is empty on ALLOW.
 
@@ -400,8 +419,9 @@ Read routes landed (Anurag, Nov 5; `backend/app/read_api.py`, all read-only):
 | `VELOCITY_MAX_PAYMENTS` | `3` | `check_and_reserve` |
 | `VELOCITY_WINDOW_SECONDS` | `600` | `check_and_reserve` |
 | `CATALOG_PATH` | empty = `stores/catalog.json` | `app/catalog.py` |
-| `JUDGE_MODEL` | `groq/llama-3.3-70b-versatile` | `judge_intent` |
-| `JUDGE_TIMEOUT_SECONDS` | `5` | orchestrator |
+| `JUDGE_BASE_URL` | `https://api.groq.com/openai/v1` | `judge_intent` |
+| `JUDGE_MODEL` | `llama-3.3-70b-versatile` | `judge_intent` |
+| `JUDGE_TIMEOUT_SECONDS` | `5` (per attempt) | `judge_intent` |
 | `ANOMALY_STEP_UP_THRESHOLD` | `0.5` (final Nov 8) | orchestrator |
 | `ANOMALY_BLOCK_THRESHOLD` | `0.9` (final Nov 8) | orchestrator |
 | `MCP_AUTH_TOKEN` | empty = `/mcp` off (503) | `app/mcp_server.py` |

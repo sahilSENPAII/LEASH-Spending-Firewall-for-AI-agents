@@ -21,6 +21,11 @@ class Settings(BaseSettings):
 
     database_url: str = ""
     groq_api_key: str = ""
+    # Intent judge (app/judge.py): any OpenAI-compatible chat API, and the limit for each of its two
+    # attempts. GROQ_API_KEY is sent as the bearer token.
+    judge_base_url: str = "https://api.groq.com/openai/v1"
+    judge_model: str = "llama-3.3-70b-versatile"
+    judge_timeout_seconds: float = Field(default=5, gt=0)
     # Base64 Ed25519 private key; the server signs mandates for the demo user. See app/mandates.py.
     mandate_signing_key: str = ""
     velocity_max_payments: int = 3

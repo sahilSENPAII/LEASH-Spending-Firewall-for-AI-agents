@@ -28,6 +28,10 @@ One entry per decision: what we chose, what we rejected, why. Newest at the bott
 - Free with no card, ~1,000 requests/day on the 70B model, very low latency.
 - Gemini free tier was ~20 requests/day on Flash — too few to develop against.
 - Fallback: llama-3.1-8b-instant on Groq, then local Ollama. LiteLLM makes it a config change.
+- Nov 5: LiteLLM was dropped for a direct httpx call to Groq's OpenAI-compatible API. Importing it
+  added about 140 MB RSS (measured 125-150 MB), too much on Render's 512 MB free tier. The provider
+  is still a config change: `JUDGE_BASE_URL` takes any OpenAI-compatible endpoint, `JUDGE_MODEL` the
+  model name.
 
 ## D8. Step-up approval through our own web page (not Telegram)
 - No bot setup; reuses the frontend; works in a phone browser.

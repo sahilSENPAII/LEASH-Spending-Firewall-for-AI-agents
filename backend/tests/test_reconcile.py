@@ -8,6 +8,7 @@ from app import mandates, orchestrator, reconcile
 from app.anomaly import AnomalyResult
 from app.audit import verify_chain
 from app.config import Settings
+from app.judge import JudgeResult
 from app.mandates import (
     MandateTerms,
     check_and_reserve,
@@ -535,9 +536,14 @@ async def _crash_when_moving_to(monkeypatch, target):
 
 
 async def _pay(sessions, paypal, monkeypatch):
-    # A low risk score, so these tests do not depend on the anomaly model.
+    # A low risk score and a matching cart, so these tests do not depend on the model or the judge.
     low = AnomalyResult(score=0.05, reasons=(), model_version="test")
     monkeypatch.setattr(orchestrator, "score_anomaly", lambda features: low)
+
+    async def match(**kwargs):
+        return JudgeResult(match=True, score=0.05, reason="ok", model="test")
+
+    monkeypatch.setattr(orchestrator, "judge_intent", match)
     return await orchestrator.request_payment(
         sessions,
         paypal,
