@@ -23,8 +23,7 @@ Two people (Sahil + teammate) work on this repo. This is their shared handoff lo
 Leash is a spending firewall for AI agents (PayPal AI Hackathon 2026, deadline Nov 13 1:30 AM IST,
 we submit Nov 12 by 6 PM IST). It is an MCP server between any AI agent and PayPal. Every payment is
 checked against a user-signed mandate → ALLOW / STEP-UP / BLOCK, and logged in a hash-chained audit log.
-Stack: Python 3.12, FastAPI, Postgres (Neon), MCP Python SDK 1.x, PayPal REST v2 sandbox, Groq via
-LiteLLM, XGBoost + SHAP, LangGraph + Playwright demo agent, React + AG Grid. Zero spend (see D6).
+Stack: Python 3.12, FastAPI, Postgres (Neon), MCP Python SDK 1.x, PayPal REST v2 sandbox, Groq (`openai/gpt-oss-120b`) via httpx (D7), XGBoost + SHAP, LangGraph + Playwright demo agent, React + AG Grid. Zero spend (see D6).
 
 Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1–D15),
 `docs/LEARN.md` (concepts), `spikes/README.md` (how to run the M0 tests).
@@ -36,7 +35,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 | M1 | Oct 31–Nov 1 | Thin end-to-end flow + deploy: Claude pays $1 sandbox via hosted Leash | **Done** (Nov 5): hosted on Render; Claude Desktop paid through hosted `/mcp` (ALLOW → CAPTURED) and the gift-card cart was BLOCKED |
 | M2 | Nov 2–3 | Mandates (Ed25519), policy engine, state machine, idempotency, saga, hash-chained audit | **Mostly done**: policy, signed mandates, budget holds, audit chain (Anurag); state machine, idempotency keys, void on capture failure (Sahil). Orchestrator switch to `check_and_reserve` / `release_budget` / `append_audit` and migration `0002` on Neon **done** (Nov 3). Budget lock proven on Neon under concurrency; saga reconcile added (Nov 4) |
 | M3 | Nov 4–5 | Attack demo: SoundHub + MegaDeals stores, LangGraph agent, injection blocked | Real-store integration merged (`aaf269b`); Windows anomaly-import fix merged (`1a182ad`); 54 agent tests pass. |
-| M4 | Nov 6–7 | Groq intent judge + XGBoost/SHAP anomaly model | Anomaly model v2 (`8cf1f50`) and Sahil's wiring (`820d249`) merged in `c0254f7`; 488 backend tests pass, 1 skipped. |
+| M4 | Nov 6–7 | Groq intent judge + XGBoost/SHAP anomaly model | Anomaly model v2 (`8cf1f50`) and Sahil's wiring (`820d249`) merged in `c0254f7`. Groq intent judge merged (`e6325bc`, main `dbc2bf7`); 537 backend tests pass, 1 skipped. **Done** (Nov 5) |
 | M5 | Nov 8 | Step-up approval via web page, survives restart | — |
 | M6 | Nov 9–10 | React frontend + AG Grid audit console. **Feature freeze Nov 10 23:59** | — |
 | M7 | Nov 11 | Hardening, README, demo video | — |
@@ -163,8 +162,7 @@ Ask Sahil for the shared sandbox values.
   passed; Ruff is clean. The Windows E2E passes in 8.13s using local SQLite and fake PayPal. The E2E
   harness now conditionally fakes the intent judge (`6b9b839`). Next planned work is the AG Grid
   console in `frontend/`.
-- Sahil + Claude: Groq intent judge (`app/judge.py`) is on `origin/sahil` (`e6325bc`); merge it after
-  the harness fake, then continue step-up approvals (M5). Render deploy and sync 1 are done (Nov 5).
+- Sahil + Claude: step-up approvals (M5) next. The Groq intent judge is merged to `main` (Nov 5).
 
 ## Next up
 - [x] Sahil: Python 3.12 via uv; Neon project `leash` (AWS us-east-1), `DATABASE_URL` in `.env`.
@@ -221,13 +219,13 @@ Ask Sahil for the shared sandbox values.
       after 60s with a clear error (`df7a1af`).
 - [x] Anurag + Claude + Codex: run the full agent suite on Windows (54 passed); E2E BLOCK then ALLOW
       passed in 8.13s using the local SQLite/fake-PayPal harness (`1a182ad`).
-- [ ] Sahil: load native libraries (including judge dependencies) at module startup, not for the first
+- [x] Sahil: load native libraries (including judge dependencies) at module startup, not for the first
       time inside an MCP tool call; the Windows faulthandler dump showed the NumPy import blocking.
 - [x] Sahil: shared `MCP_AUTH_TOKEN` by DM. **Rotated on Nov 5 ~04:55 IST** (old value leaked in a
       chat); Anurag must put the new value in `AGENT_LEASH_TOKEN`.
-- [ ] Sahil: write `risk_score` (string) and `judge` into the `payment.decided` audit payload when
+- [x] Sahil: write `risk_score` (string) and `judge` into the `payment.decided` audit payload when
       the model and judge run; the console reads them from there.
-- [ ] Sahil: when the intent judge lands, store its `score` as a string in the audit payload; the
+- [x] Sahil: when the intent judge lands, store its `score` as a string in the audit payload; the
       audit chain rejects floats.
 - [x] Both: keep Render awake. cron-job.org hits `GET /health` every 10 min (Sahil's account), so the
       free instance should not cold-start. Still hit `/health` once before a recorded demo.
@@ -243,7 +241,8 @@ Ask Sahil for the shared sandbox values.
       Note: `m_demo` now has $320 / 3 payments left after Sahil's hosted buy.
 - [x] Anurag + Claude + Codex: agent E2E harness fakes `orchestrator.judge_intent` (match=True,
       score 0.05) when the orchestrator has one, so CI stays green without `GROQ_API_KEY` (`6b9b839`).
-- [ ] Sahil: merge the Groq judge after the harness fake; check that the agent E2E test passes in CI.
+- [x] Sahil: merge the Groq judge after the harness fake (`dbc2bf7`); agent 54 passed locally on the
+      merged code. Check CI is green on GitHub.
 - [ ] Sahil (minor): `list_mandates` should hide revoked/expired mandates (or sort active first) and
       return `"currency": "USD"`; Claude Desktop listed the two old `m_pgtest_*` mandates.
 - [ ] Sahil (M7 demo): when the cart check fails, still run `evaluate_payment` and merge both reason
@@ -254,6 +253,26 @@ Ask Sahil for the shared sandbox values.
       approvals pages); API base URL from `VITE_API_URL`.
 
 ## Log (newest first)
+
+### 2026-11-05 07:20 IST — Sahil + Claude
+- Groq intent judge merged to `main` (`6562e14` + `e6325bc`, merge `dbc2bf7`). `app/judge.py`:
+  `judge_intent(*, intent, mandate, cart)` → `JudgeResult(match, score, reason, model)`. Runs in
+  parallel with the anomaly model after policy ALLOW. `match=False` → STEP_UP `intent_mismatch`;
+  any error/timeout/missing key → STEP_UP `intent_check_failed`. `judge` (score as 6-decimal string)
+  is in the T2 `payment.decided` payload and in `request_payment` / `get_payment_status`, plus
+  `approval_url: null` until M5.
+- Calls Groq's OpenAI-compatible API with httpx (LiteLLM dropped: +~140 MB RSS on the 512 MB free
+  tier; D7 note). **Groq retired `llama-3.3-70b-versatile` on 2026-08-16**; default model is now
+  `openai/gpt-oss-120b`. Only `message.content` is read. HTTP error bodies are logged (key redacted).
+- Real Groq smoke test (`scripts/smoke_judge.py`): Sony XM5 → match=True 0.0 (1.17 s); 3 × $100
+  gift cards → match=False 1.0 (0.85 s).
+- New env vars (names in `.env.example`): `JUDGE_BASE_URL`, `JUDGE_MODEL`, `JUDGE_TIMEOUT_SECONDS`.
+  Render has `JUDGE_MODEL=openai/gpt-oss-120b` and `GROQ_API_KEY`. Without a key, every payment
+  that passes policy is STEP_UP (fail safe).
+- Tests: backend 537 passed, 1 skipped; agent 54 passed on the merged code (Anurag's judge fake).
+- Files: `backend/app/{judge,orchestrator,config}.py`, `backend/scripts/smoke_judge.py`,
+  `backend/tests/{conftest,test_judge,test_orchestrator,test_reconcile}.py`, `.env.example`,
+  `docs/CONTRACTS.md` (5.1–5.4, 5.7), `docs/DECISIONS.md` (D7), `CONTEXT.md`.
 
 ### 2026-11-05 07:02 IST — Anurag + Claude + Codex
 - Added a conditional intent-judge fake to the agent backend harness and updated the E2E test
