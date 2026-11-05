@@ -1,8 +1,8 @@
 """The agent against Leash's REAL MCP server, orchestrator, check_and_reserve and audit chain.
 
-Only the database (throwaway SQLite instead of Neon) and PayPal (a fake that captures) are swapped,
-in tests/backend_harness.py. Needs `uv` and a synced backend (`cd backend && uv sync`); skipped
-otherwise.
+Only the database (throwaway SQLite instead of Neon), PayPal (a fake that captures) and the intent
+judge (a fake that says the cart matches) are swapped, in tests/backend_harness.py. Needs `uv` and a
+synced backend (`cd backend && uv sync`); skipped otherwise.
 """
 
 import base64
