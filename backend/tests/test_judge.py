@@ -78,7 +78,7 @@ async def test_match_returns_the_validated_verdict(settings, monkeypatch):
     assert str(request.url) == "https://api.groq.com/openai/v1/chat/completions"
     assert request.headers["authorization"] == "Bearer gsk-test"
     assert json.loads(request.content) == {
-        "model": "llama-3.3-70b-versatile",
+        "model": "openai/gpt-oss-120b",
         "messages": build_messages(intent=INTENT, mandate=MANDATE, cart=SONY),
         "temperature": 0,
         "response_format": {"type": "json_object"},
@@ -136,7 +136,7 @@ async def test_provider_error_on_both_attempts_raises(settings, monkeypatch, rep
     "reply",
     [
         "not json",
-        "",
+        "   ",
         '{"match": true, "score": 0.1}',
         '{"match": "true", "score": 0.1, "reason": "ok"}',
         '{"match": true, "score": "0.1", "reason": "ok"}',
@@ -153,6 +153,83 @@ async def test_bad_json_raises_after_one_retry(settings, monkeypatch, reply):
     with pytest.raises(ValidationError):
         await judge_intent(intent=INTENT, mandate=MANDATE, cart=SONY)
     assert len(llm.calls) == 2
+
+
+def _message(message):
+    return httpx.Response(200, json={"choices": [{"message": message}]})
+
+
+VALID = {"match": True, "score": 0.0, "reason": "Sony headphones."}
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        {"role": "assistant", "content": ""},
+        {"role": "assistant", "content": None},
+        {"role": "assistant"},
+        # A reasoning model's reasoning holds valid verdict JSON here; it must not be used.
+        {"role": "assistant", "content": "", "reasoning": json.dumps(VALID)},
+    ],
+)
+async def test_empty_or_missing_content_raises(settings, monkeypatch, message):
+    llm = _fake(monkeypatch, _message(message), _message(message))
+    with pytest.raises(ValueError, match="no content"):
+        await judge_intent(intent=INTENT, mandate=MANDATE, cart=SONY)
+    assert len(llm.calls) == 2
+
+
+async def test_reasoning_is_never_read(settings, monkeypatch):
+    reasoning = '{"match": false, "score": 1.0, "reason": "from the reasoning"}'
+    message = {"role": "assistant", "content": json.dumps(VALID), "reasoning": reasoning}
+    _fake(monkeypatch, _message(message))
+    result = await judge_intent(intent=INTENT, mandate=MANDATE, cart=SONY)
+    assert (result.match, result.reason) == (True, "Sony headphones.")
+    assert "reasoning" not in vars(result)
+
+
+async def test_http_error_logs_the_status_and_groqs_message(settings, monkeypatch, caplog):
+    body = {
+        "error": {
+            "message": "The model `llama-3.3-70b-versatile` does not exist",
+            "type": "invalid_request_error",
+            "code": "model_not_found",
+        }
+    }
+    _fake(monkeypatch, httpx.Response(404, json=body), httpx.Response(404, json=body))
+    with caplog.at_level("WARNING", logger="app.judge"), pytest.raises(httpx.HTTPStatusError):
+        await judge_intent(intent=INTENT, mandate=MANDATE, cart=SONY)
+
+    logged = [r.getMessage() for r in caplog.records if "got HTTP" in r.getMessage()]
+    assert len(logged) == 2
+    assert logged[0].startswith("intent judge got HTTP 404: ")
+    assert "model_not_found" in logged[0] and "llama-3.3-70b-versatile" in logged[0]
+
+
+async def test_only_the_first_300_characters_of_the_body_are_logged(settings, monkeypatch, caplog):
+    reply = httpx.Response(500, text="x" * 1000)
+    _fake(monkeypatch, reply, reply)
+    with caplog.at_level("WARNING", logger="app.judge"), pytest.raises(httpx.HTTPStatusError):
+        await judge_intent(intent=INTENT, mandate=MANDATE, cart=SONY)
+
+    logged = next(r.getMessage() for r in caplog.records if "got HTTP" in r.getMessage())
+    assert logged == "intent judge got HTTP 500: " + "x" * 300
+
+
+async def test_key_header_and_prompt_are_never_logged(settings, monkeypatch, caplog):
+    settings.groq_api_key = "gsk-secret-0123456789"
+    # Even a body that repeats the key across the 300-character cut.
+    echo = httpx.Response(401, text="y" * 270 + f"Invalid API Key: {settings.groq_api_key}")
+    _fake(monkeypatch, echo, echo)
+    with caplog.at_level("DEBUG"), pytest.raises(httpx.HTTPStatusError):
+        await judge_intent(intent=INTENT, mandate=MANDATE, cart=SONY)
+
+    logged = caplog.text + "".join(r.getMessage() for r in caplog.records)
+    assert "got HTTP 401" in logged
+    for secret in ("gsk-secret", "0123456789", "Bearer", "authorization", "Authorization"):
+        assert secret not in logged
+    assert INTENT not in logged and "cart_data" not in logged
+    assert "spending firewall" not in logged  # the system prompt
 
 
 async def test_whole_number_score_is_accepted(settings, monkeypatch):

@@ -245,7 +245,7 @@ class JudgeResult:
     match: bool               # True = the cart fits what the user asked for
     score: float              # 0.0 (clear match) .. 1.0 (clear mismatch)
     reason: str               # one short human-readable sentence
-    model: str                # e.g. "llama-3.3-70b-versatile"
+    model: str                # e.g. "openai/gpt-oss-120b"
 ```
 - Groq (D7): httpx `POST {JUDGE_BASE_URL}/chat/completions` with `Authorization: Bearer
   <GROQ_API_KEY>`, model `JUDGE_MODEL`, temperature 0, `response_format: json_object`. Any
@@ -262,6 +262,10 @@ class JudgeResult:
   orchestrator turns that into STEP_UP (D3).
 - `intent` is the user's own words ("Sony or Bose noise-cancelling headphones"). See open question A.
 - An HTTP error, a body that is not JSON or has no `choices`, and a timeout all count as failures.
+  On an HTTP error the status and the first 300 characters of the body are logged (the key is
+  redacted); the key, the `Authorization` header and the prompt are never logged.
+- Only `message.content` is read. Empty or missing content is a failure. Reasoning models
+  (`openai/gpt-oss-120b`) also return `message.reasoning`; it is never parsed or stored.
 - `scripts/smoke_judge.py` calls real Groq twice (a matching and a mismatching cart).
 
 ### 5.2 How the checks combine
@@ -343,7 +347,7 @@ transaction. Events:
   "status": "REQUESTED | BLOCKED | AWAITING_APPROVAL | AUTHORIZED | CAPTURED | VOIDED | FAILED | DENIED | EXPIRED",
   "reasons": [{"code": "merchant_not_allowed", "message": "...", "source": "policy | judge | anomaly | system"}],
   "risk_score": "0.045706",
-  "judge": {"match": true, "score": "0.050000", "reason": "...", "model": "llama-3.3-70b-versatile"},
+  "judge": {"match": true, "score": "0.050000", "reason": "...", "model": "openai/gpt-oss-120b"},
   "approval_url": "https://.../approvals/<payment_id> or null"
 }
 ```
@@ -420,7 +424,7 @@ Read routes landed (Anurag, Nov 5; `backend/app/read_api.py`, all read-only):
 | `VELOCITY_WINDOW_SECONDS` | `600` | `check_and_reserve` |
 | `CATALOG_PATH` | empty = `stores/catalog.json` | `app/catalog.py` |
 | `JUDGE_BASE_URL` | `https://api.groq.com/openai/v1` | `judge_intent` |
-| `JUDGE_MODEL` | `llama-3.3-70b-versatile` | `judge_intent` |
+| `JUDGE_MODEL` | `openai/gpt-oss-120b` | `judge_intent` |
 | `JUDGE_TIMEOUT_SECONDS` | `5` (per attempt) | `judge_intent` |
 | `ANOMALY_STEP_UP_THRESHOLD` | `0.5` (final Nov 8) | orchestrator |
 | `ANOMALY_BLOCK_THRESHOLD` | `0.9` (final Nov 8) | orchestrator |

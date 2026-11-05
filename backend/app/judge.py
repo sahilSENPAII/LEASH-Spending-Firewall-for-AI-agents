@@ -58,7 +58,7 @@ class JudgeResult:
     match: bool  # True = the cart fits what the user asked for
     score: float  # 0.0 (clear match) .. 1.0 (clear mismatch)
     reason: str  # one short sentence
-    model: str  # e.g. "llama-3.3-70b-versatile"
+    model: str  # e.g. "openai/gpt-oss-120b"
 
 
 class _Verdict(BaseModel):
@@ -129,5 +129,15 @@ async def _ask(settings: Settings, messages: list[dict]) -> _Verdict:
                 "response_format": {"type": "json_object"},
             },
         )
-        response.raise_for_status()
-    return _Verdict.model_validate_json(response.json()["choices"][0]["message"]["content"])
+        if response.is_error:
+            # Groq says why in the body (unknown model, bad key, rate limit). Redact before cutting,
+            # so no part of the key is logged even if the body repeats it.
+            body = response.text.replace(settings.groq_api_key, "[redacted]")[:300]
+            log.warning("intent judge got HTTP %s: %s", response.status_code, body)
+            response.raise_for_status()
+    # Only content is read. Reasoning models (gpt-oss) also send message.reasoning, which is
+    # never parsed or stored.
+    content = response.json()["choices"][0]["message"].get("content")
+    if not content:
+        raise ValueError("the judge's reply has no content")
+    return _Verdict.model_validate_json(content)

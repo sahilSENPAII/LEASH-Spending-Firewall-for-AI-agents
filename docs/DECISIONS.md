@@ -32,6 +32,10 @@ One entry per decision: what we chose, what we rejected, why. Newest at the bott
   added about 140 MB RSS (measured 125-150 MB), too much on Render's 512 MB free tier. The provider
   is still a config change: `JUDGE_BASE_URL` takes any OpenAI-compatible endpoint, `JUDGE_MODEL` the
   model name.
+- Nov 5: Groq retired llama-3.3-70b-versatile on 2026-08-16 (it now answers 404). The judge uses
+  `openai/gpt-oss-120b`, verified by `scripts/smoke_judge.py` on Nov 5 (Sony XM5 matched, 3 x $100
+  gift cards did not). Fallbacks: `openai/gpt-oss-20b`, then `qwen/qwen3.8-27b`, switched with
+  `JUDGE_MODEL` only.
 
 ## D8. Step-up approval through our own web page (not Telegram)
 - No bot setup; reuses the frontend; works in a phone browser.
