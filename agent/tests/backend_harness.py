@@ -1,10 +1,11 @@
-"""Leash's real MCP server on a throwaway SQLite database with a fake PayPal. Test helper only.
+"""Leash's real MCP server on throwaway SQLite with fake PayPal and judge. Test helper only.
 
 Started by tests/test_e2e_backend.py inside the BACKEND's environment:
   uv run --directory ../backend python tests/backend_harness.py <sqlite-file>
 Everything Leash does is real (orchestrator, check_and_reserve, policy, audit chain) except the
-database (SQLite, not Neon), PayPal (a fake that authorizes and captures) and the clock (pinned to
-FIXED_NOW). Needs MANDATE_SIGNING_KEY in the environment; it seeds m_demo with the demo terms.
+database (SQLite, not Neon), PayPal (a fake that authorizes and captures), the intent judge (a fake
+that says the cart matches, so no GROQ_API_KEY is needed) and the clock (pinned to FIXED_NOW).
+Needs MANDATE_SIGNING_KEY in the environment; it seeds m_demo with the demo terms.
 """
 
 import asyncio
@@ -49,6 +50,17 @@ class FakePayPal:
 
     async def void(self, authorization_id, request_id):
         return None
+
+
+async def _judge_says_match(**kwargs):
+    from app.judge import JudgeResult
+
+    return JudgeResult(match=True, score=0.05, reason="ok", model="test")
+
+
+# Without a Groq key the real judge fails, and a failed check is a STEP_UP (D3).
+if hasattr(orchestrator, "judge_intent"):
+    orchestrator.judge_intent = _judge_says_match
 
 
 async def prepare(path: str):

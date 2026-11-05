@@ -113,6 +113,9 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
   injected cart BLOCKED, normal cart ALLOWED. It uses the local SQLite/fake-PayPal harness.
 - The agent end-to-end test accepts `merchant_not_allowed` or `mixed_categories` while still requiring
   `BLOCK` and `BLOCKED`.
+- The agent backend E2E harness conditionally fakes `orchestrator.judge_intent` with a deterministic
+  matching result (`score=0.05`, `model="test"`), so CI does not need `GROQ_API_KEY`. It is a no-op on
+  current `main` until Sahil's judge lands. Agent tests: 54 passed; Ruff clean.
 
 - LangGraph attack agent is implemented in `agent/` and pushed to `anurag` as `5372fa2`. It uses
   Playwright, scripted or Groq planning, stand-in stores, and Leash's MCP payment tool; D14 records
@@ -157,10 +160,11 @@ Ask Sahil for the shared sandbox values.
 ## In progress
 - Anurag + Claude + Codex: bearer-token support (`14c0bab`), the MCP startup timeout (`df7a1af`),
   and the Windows native-import fix (`1a182ad`) are merged. Backend 488 passed (1 skipped); agent 54
-  passed; Ruff is clean. The Windows E2E passes in 8.13s using local SQLite and fake PayPal. Next
-  planned work is the AG Grid console in `frontend/`.
-- Sahil + Claude: Groq intent judge (`app/judge.py`), then step-up approvals (M5). Render deploy and
-  sync 1 are done (Nov 5).
+  passed; Ruff is clean. The Windows E2E passes in 8.13s using local SQLite and fake PayPal. The E2E
+  harness now conditionally fakes the intent judge (`6b9b839`). Next planned work is the AG Grid
+  console in `frontend/`.
+- Sahil + Claude: Groq intent judge (`app/judge.py`) is on `origin/sahil` (`e6325bc`); merge it after
+  the harness fake, then continue step-up approvals (M5). Render deploy and sync 1 are done (Nov 5).
 
 ## Next up
 - [x] Sahil: Python 3.12 via uv; Neon project `leash` (AWS us-east-1), `DATABASE_URL` in `.env`.
@@ -237,6 +241,9 @@ Ask Sahil for the shared sandbox values.
 - [x] Anurag: hosted `attack` through Render `/mcp` with the bearer token: BLOCK (Nov 5).
 - [ ] Both: hosted `normal` together (real $179 sandbox charge) at sync 2, Nov 6 evening IST.
       Note: `m_demo` now has $320 / 3 payments left after Sahil's hosted buy.
+- [x] Anurag + Claude + Codex: agent E2E harness fakes `orchestrator.judge_intent` (match=True,
+      score 0.05) when the orchestrator has one, so CI stays green without `GROQ_API_KEY` (`6b9b839`).
+- [ ] Sahil: merge the Groq judge after the harness fake; check that the agent E2E test passes in CI.
 - [ ] Sahil (minor): `list_mandates` should hide revoked/expired mandates (or sort active first) and
       return `"currency": "USD"`; Claude Desktop listed the two old `m_pgtest_*` mandates.
 - [ ] Sahil (M7 demo): when the cart check fails, still run `evaluate_payment` and merge both reason
@@ -247,6 +254,13 @@ Ask Sahil for the shared sandbox values.
       approvals pages); API base URL from `VITE_API_URL`.
 
 ## Log (newest first)
+
+### 2026-11-05 07:02 IST — Anurag + Claude + Codex
+- Added a conditional intent-judge fake to the agent backend harness and updated the E2E test
+  description (`6b9b839`); test files only. Agent tests: 54 passed; Ruff clean.
+- Inspected Sahil's `judge_intent` API on `origin/sahil` (`e6325bc`). The full E2E has not yet been
+  run against the merged judge; Sahil's merge and CI check remain next.
+- Files: `agent/tests/backend_harness.py`, `agent/tests/test_e2e_backend.py`, `CONTEXT.md`.
 
 ### 2026-11-05 05:05 IST — Sahil + Claude
 - Render deploy (sync 1 done). Web Service `leash`, URL `https://leash-84h9.onrender.com`, region
