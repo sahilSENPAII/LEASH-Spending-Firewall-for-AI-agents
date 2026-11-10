@@ -25,7 +25,7 @@ flowchart TD
     F --> H[Decision]
     G --> H
     H -->|BLOCK| X
-    H -->|STEP_UP| S[Approval link for a person<br/>in progress]
+    H -->|STEP_UP| S[Approval link: a person approves or denies]
     H -->|ALLOW| P[PayPal authorize, then capture]
     X --> L[Hash-chained audit log]
     S --> L
@@ -61,8 +61,11 @@ decision stricter. A score of 0.5 or more is a STEP_UP and 0.9 or more is a BLOC
 
 **Decision and PayPal.** On ALLOW, Leash asks PayPal to authorize the payment (a hold on the buyer's
 saved wallet) and then to capture it (take the money). If capture fails, Leash voids the hold and
-gives the budget back. On STEP_UP the payment waits with its budget held. The approval link and the
-page where a person approves or denies are being built now; today `approval_url` is `null`.
+gives the budget back. On STEP_UP the payment waits with its budget held, and Leash returns an
+`approval_url`. That link opens a small page served by the backend that shows the cart, what the user
+asked for and why Leash stopped it. Approve continues to PayPal; Deny releases the budget. The link
+holds a random single-use token (only its hash is stored) and expires after 15 minutes, after which
+the payment is marked EXPIRED and the budget is released.
 
 **Audit log and console.** Every step is written to an audit table. Each entry stores a SHA-256 hash
 of the entry before it, so editing, deleting or reordering a row breaks the chain.
@@ -82,9 +85,11 @@ SoundHub, up to $200 per payment.
    (`mixed_categories`: the cart mixes electronics and gift cards). PayPal is never called. When we
    sent the gift cards alone from Claude Desktop, Leash listed three reasons: wrong category, store
    not allowed, and over the per-payment limit.
-3. **Fits the rules, not the intent, STEP_UP (in progress).** A purchase that passes every rule but
-   is not what the user asked for is paused, and a person approves or denies it. The judge and the
-   STEP_UP decision work today. The approval page and the demo item for this case are being built now.
+3. **Fits the rules, not the intent, STEP_UP.** The agent buys a $129 JBL Bluetooth speaker from
+   SoundHub. It is electronics, under $200 and from an allowed store, so every rule passes. The judge
+   says a speaker is not the headphones the user asked for, so Leash pauses the payment and returns
+   an approval link. The person opens it on their phone and taps Approve, and PayPal sandbox
+   captures the payment. Tapping Approve again does not charge twice.
 
 ## Tech stack
 

@@ -36,7 +36,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 | M2 | Nov 2–3 | Mandates (Ed25519), policy engine, state machine, idempotency, saga, hash-chained audit | **Mostly done**: policy, signed mandates, budget holds, audit chain (Anurag); state machine, idempotency keys, void on capture failure (Sahil). Orchestrator switch to `check_and_reserve` / `release_budget` / `append_audit` and migration `0002` on Neon **done** (Nov 3). Budget lock proven on Neon under concurrency; saga reconcile added (Nov 4) |
 | M3 | Nov 4–5 | Attack demo: SoundHub + MegaDeals stores, LangGraph agent, injection blocked | Real-store integration merged (`aaf269b`); Windows anomaly-import fix merged (`1a182ad`); 54 agent tests pass. |
 | M4 | Nov 6–7 | Groq intent judge + XGBoost/SHAP anomaly model | Anomaly model v2 (`8cf1f50`) and Sahil's wiring (`820d249`) merged in `c0254f7`. Groq intent judge merged (`e6325bc`, main `dbc2bf7`); 537 backend tests pass, 1 skipped. **Done** (Nov 5) |
-| M5 | Nov 8 | Step-up approval via web page, survives restart | — |
+| M5 | Nov 8 | Step-up approval via web page, survives restart | **Done** (Nov 10): approval link + server-rendered page, approve/deny/expiry, stuck-approval settling; hosted test on Render + Neon + PayPal sandbox passed (STEP_UP → approve → CAPTURED, no double charge) |
 | M6 | Nov 9–10 | React frontend + AG Grid audit console. **Feature freeze Nov 10 23:59** | **Done** (Nov 10): AG Grid Community audit console in `frontend/` on port 5173 with dual views (`Payment Decisions` and `Audit Chain`), quick search, filters, live SHA-256 chain verification badge, and inspector drawer. |
 | M7 | Nov 11 | Hardening, README, demo video | — |
 | M8 | Nov 12 | Devpost submission | — |
@@ -158,15 +158,8 @@ Ask Sahil for the shared sandbox values.
 
 ## In progress
 - Anurag + Claude + Codex: M6 AG Grid Community audit console in `frontend/` is merged to `main`. Dual views (`Payment Decisions` + `Tamper-Evident Audit Chain`) with live SHA-256 chain verification badge and inspector drawer are live on port 5173.
-- Sahil + Claude (claimed Nov 10, 14:15 IST): **M5 step-up approvals**, aiming to merge before the
-  23:59 freeze. Plan: migration `0003` (approval token hash, expiry, decision columns on `payments`);
-  STEP_UP returns a real `approval_url` with a single-use token; approval page **server-rendered by the
-  backend** at `/approvals/{id}` (no separate frontend deploy); approve continues to PayPal, deny and
-  expiry release the budget; expiry runs in a background task. Also: a non-headphone SoundHub item
-  (`sh-jbl-flip6`, $129) so the judge gives a STEP_UP in the demo, and `scripts/seed_video_mandate.py`
-  for a fresh `m_video` mandate.
-  **Heads-up Anurag:** Sahil will run migration `0003` on Neon before merging and set
-  `PUBLIC_BASE_URL` on Render. **Cut:** the mandate form page (seed script instead).
+- Sahil + Claude: M5 done and merged (Nov 10). Next (Nov 11, polish only): show all block reasons at
+  once, approval page polish (reason listed twice, expiry in UTC), small backlog, demo video, Devpost.
 
 ## Next up
 - [x] Sahil: Python 3.12 via uv; Neon project `leash` (AWS us-east-1), `DATABASE_URL` in `.env`.
@@ -214,7 +207,8 @@ Ask Sahil for the shared sandbox values.
 - [x] Anurag + Claude + Codex: add read-only `GET /payments`, `GET /payments/{id}`, `GET /audit`,
       and `GET /audit/verify` APIs, `CORS_ORIGINS`, and backend Python 3.12 pin (`783a1ed`); 363
       backend tests passed, 1 skipped, Ruff clean.
-- [ ] Both: sync 2, Nov 6 evening IST (attack blocked end to end on Neon).
+- [x] Both: sync 2 (attack blocked end to end on Neon, Anurag, Nov 5). Hosted `normal` skipped: the
+      honest buy was already proven hosted (Nov 5) and the video uses `m_video`.
 - [x] Anurag + Claude + Codex: remove the old `amount` fallback; use Sahil's real stores for demos
       while keeping `agent/standin_stores/` for tests/offline runs (`aaf269b`).
 - [x] Anurag + Claude + Codex: send `AGENT_LEASH_TOKEN` as the bearer header when using hosted
@@ -241,7 +235,7 @@ Ask Sahil for the shared sandbox values.
       model v2. Thresholds: STEP_UP at 0.5 and BLOCK at 0.9, with STEP_UP on risk-check errors.
 - [x] Anurag (Nov 10): AG Grid audit console in `frontend/` (React 18 + Vite + TypeScript strict mode + Tailwind CSS + `ag-grid-react` v32); passes lint, Vitest and production build.
 - [x] Anurag: hosted `attack` through Render `/mcp` with the bearer token: BLOCK (Nov 5).
-- [ ] Both: hosted `normal` together (real $179 sandbox charge) at sync 2, Nov 6 evening IST.
+- [x] Both: hosted `normal`: skipped (see sync 2). `m_demo` stays at $320 / 3 payments.
       Note: `m_demo` now has $320 / 3 payments left after Sahil's hosted buy.
 - [x] Anurag + Claude + Codex: agent E2E harness fakes `orchestrator.judge_intent` (match=True,
       score 0.05) when the orchestrator has one, so CI stays green without `GROQ_API_KEY` (`6b9b839`).
@@ -249,14 +243,46 @@ Ask Sahil for the shared sandbox values.
       merged code. Check CI is green on GitHub.
 - [ ] Sahil (minor): `list_mandates` should hide revoked/expired mandates (or sort active first) and
       return `"currency": "USD"`; Claude Desktop listed the two old `m_pgtest_*` mandates.
-- [ ] Sahil (M7 demo): when the cart check fails, still run `evaluate_payment` and merge both reason
+- [ ] Sahil (M7 demo, Nov 11): when the cart check fails, still run `evaluate_payment` and merge both reason
       lists, so the attack shows every reason (wrong store, over the limit, mixed categories).
-- [ ] Sahil (minor): add `stores/test_serve.py` (6 tests) to CI.
+- [x] Sahil (minor): add `stores/test_serve.py` (6 tests) to CI (`6c7cf52`).
 - [x] Sahil: set `OPENBLAS_NUM_THREADS=1` and `OMP_NUM_THREADS=1` on Render (free tier is 512 MB).
 - [x] Both: one Vite + React app in `frontend/` (Anurag's AG Grid console + Sahil's mandate and
       approvals pages); API base URL from `VITE_API_URL`.
 
 ## Log (newest first)
+
+### 2026-11-10 15:25 IST — Sahil + Claude
+- **M5 step-up approvals merged** (`a2ccac3`, `d8e221d`; merge `31d5866`). STEP_UP now returns
+  `approval_url` (`{PUBLIC_BASE_URL}/approvals/{id}?token=...`) and `approval_expires_at`. The token is
+  random and single-use; only its SHA-256 is stored, and it is redacted from access logs.
+  `GET /approvals/{id}` is a server-rendered page (no state change); `POST .../approve` re-checks the
+  mandate and continues to PayPal authorize → capture (shared `authorize_and_capture`);
+  `POST .../deny` → DENIED + budget released. The payment row is locked `FOR UPDATE`, so a second
+  click does nothing. A background loop (every 60 s, and at startup) expires unanswered approvals
+  (EXPIRED + release), expires legacy STEP_UP rows with no expiry, and settles approvals stuck after
+  `APPROVAL_STUCK_SECONDS` (300) by asking PayPal with the idempotency key (capture if an order exists,
+  else FAILED + release).
+- Demo support (`da5d311`): `sh-jbl-flip6` JBL Flip 6 speaker ($129, electronics) at SoundHub, so the
+  judge returns STEP_UP for the `m_demo`/`m_video` intent; `scripts/seed_video_mandate.py` (`m_video`:
+  $1000 budget, 10 payments, $200 max, SoundHub, until 2026-12-31).
+- **Neon:** migration `0003` applied (nullable approval columns on `payments`); `m_video` seeded.
+  **Render:** `PUBLIC_BASE_URL=https://leash-84h9.onrender.com` set. New env names in `.env.example`:
+  `PUBLIC_BASE_URL`, `APPROVAL_TTL_SECONDS` (900), `APPROVAL_STUCK_SECONDS` (300, min 300).
+- **Hosted test passed** (Render + Neon + PayPal sandbox): `m_video`, 1 × `sh-jbl-flip6` → STEP_UP
+  (`intent_mismatch`: "Item is a speaker, not Sony/Bose noise-cancelling headphones", judge 0.95,
+  risk 0.0066) → approved on phone → CAPTURED. Second Approve showed the final status and did not
+  charge again; `m_video` is now $871 / 9 payments. `/audit/verify` ok.
+- Docs merged from `sahil-docs`: README rewrite for judges, MIT LICENSE (both authors), LEARN.md
+  section (catalog, risk wiring, HTTP MCP, Render, judge), stores tests in CI. README updated for M5.
+- Note: Render auto-deploy did not pick up the merge; it was deployed with **Manual Deploy → Deploy
+  latest commit**. Check auto-deploy after the next push.
+- Tests: backend 563 passed, 1 skipped; agent 54; stores 6; CI green on `main`.
+- Files: `backend/app/{approvals,orchestrator,main,models,config,mcp_server}.py`,
+  `backend/migrations/versions/0003_payment_approvals.py`, `backend/tests/*`,
+  `backend/scripts/seed_video_mandate.py`, `stores/catalog.json`, `stores/test_serve.py`, `.env.example`,
+  `docs/CONTRACTS.md`, `docs/DECISIONS.md` (D8), `README.md`, `LICENSE`, `docs/LEARN.md`,
+  `.github/workflows/ci.yml`, `CONTEXT.md`.
 
 ### 2026-11-10 14:15 IST — Sahil + Claude
 - Claimed M5 approvals plus demo support (`sh-jbl-flip6`, `m_video` seed). Mandate form cut for time.
