@@ -263,6 +263,15 @@ Ask Sahil for the shared sandbox values.
 
 ## Log (newest first)
 
+### 2026-11-11 04:40 IST — Anurag + Claude + Codex
+- Console colours changed after review (`332b5d0`, then `cfaf104`; on `anurag`, fast-forwarded into
+  `main`): the header, title and summary cards sit on a deep teal band; the grids and inspector are
+  light with teal accents. Step-up is amber, block is red. AG Grid now uses the light
+  `ag-theme-quartz` theme. `332b5d0` was an all-dark teal step that `cfaf104` replaced.
+- Tests: frontend 4 passed, tsc clean, build ok. Checked locally against the hosted API at 1440 wide.
+- Files: `frontend/{index.html,tailwind.config.js}`, `frontend/src/{App.tsx,index.css}`,
+  `frontend/src/components/{AuditConsole,ChainVerifyBadge,InspectorDrawer}.tsx`.
+
 ### 2026-11-11 04:30 IST — Anurag + Claude + Codex
 - Console redesign (`884c1d8`, on `anurag`, fast-forwarded into `main`): one graphite palette, IBM
   Plex Sans/Mono, colour only for decisions, a decision-mix bar, sentence-case labels, and a calmer
