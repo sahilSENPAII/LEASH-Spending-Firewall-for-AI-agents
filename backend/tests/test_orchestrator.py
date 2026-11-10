@@ -800,31 +800,28 @@ def mcp_env(sessions, monkeypatch):
     return paypal, settings
 
 
-async def test_list_mandates_shows_what_is_left_with_money_as_strings(sessions, mcp_env):
+async def test_list_mandates_lists_only_active_ones_with_money_as_strings(sessions, mcp_env):
     assert (await _pay(sessions, FakePayPal()))["decision"] == "ALLOW"
     async with sessions() as s:
         await revoke_mandate(s, "m_big", NOW)
+        old = DEMO_TERMS | {
+            "mandate_id": "m_old",
+            "created_at": datetime(2026, 1, 1, tzinfo=UTC),
+            "expires_at": datetime(2026, 1, 2, tzinfo=UTC),
+        }
+        await create_mandate(s, MandateTerms(**old))
         await s.commit()
 
     result = await mcp_server.list_mandates()
 
-    # Same created_at, so Anurag's list_mandates orders them by id.
+    # m_big is revoked and m_old has expired, so only m_demo is left.
     assert result == {
         "mandates": [
-            {
-                "mandate_id": "m_big",
-                "intent": DEMO_TERMS["intent"],
-                "category": "electronics",
-                "max_payment_amount": "200.00",
-                "remaining_budget": "5000.00",
-                "remaining_count": 5,
-                "expires_at": "2026-12-31T00:00:00Z",
-                "revoked": True,
-            },
             {
                 "mandate_id": "m_demo",
                 "intent": DEMO_TERMS["intent"],
                 "category": "electronics",
+                "currency": "USD",
                 "max_payment_amount": "200.00",
                 "remaining_budget": "321.00",
                 "remaining_count": 4,
@@ -833,6 +830,24 @@ async def test_list_mandates_shows_what_is_left_with_money_as_strings(sessions, 
             },
         ]
     }
+
+
+async def test_cart_of_more_than_20_lines_is_blocked_before_pricing(sessions):
+    paypal = FakePayPal()
+    twenty = [SONY] * 20
+    over = await _pay(sessions, paypal, items=twenty + [SONY])
+    assert over["decision"] == "BLOCK" and _codes(over) == ["too_many_items"]
+    assert "21 lines" in over["reasons"][0]["message"] and paypal.calls == []
+    (payment,), events = await _rows(sessions)
+    assert (payment.status, payment.amount) == (S.BLOCKED, Decimal("0.00"))
+    assert [e.event_type for e in events] == ["payment.decided", "payment.blocked"]
+    assert await _usage(sessions) == (Decimal("0.00"), 0, [])
+    assert await _chain_ok(sessions)
+
+    # Exactly 20 lines is priced as usual (and then stopped by the policy, not the line cap).
+    at_limit = await _pay(sessions, FakePayPal(), items=twenty, now=NOW + timedelta(seconds=1))
+    assert "too_many_items" not in _codes(at_limit)
+    assert "amount_exceeds_max_payment_amount" in _codes(at_limit)
 
 
 async def test_get_payment_status_returns_the_decision_response(sessions, mcp_env):

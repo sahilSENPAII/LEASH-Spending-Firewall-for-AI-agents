@@ -137,12 +137,17 @@ async def test_page_shows_the_cart_and_reasons_and_changes_nothing(env):
         "Intent check: Gift cards are not headphones.",
         "Risk score: 0.050000",
         "Risk signal: amount $179.00",
-        "Expires at 12:15 UTC",
+        'Expires at <time datetime="2026-11-04T12:15:00Z">12:15 UTC</time>',
+        "toLocaleTimeString",
         f'action="{path}/approve"',
         f'action="{path}/deny"',
         f'name="token" value="{token}"',
     ):
         assert text in page.text
+
+    # Each reason once: the judge's sentence is in the reasons, so Checks does not repeat it.
+    assert page.text.count("Gift cards are not headphones.") == 1
+    assert page.text.count("amount $179.00") == 1
 
     # Past the expiry the page only says so; expiring is the job of a POST or the expiry run.
     env.now = NOW + TTL
@@ -152,6 +157,16 @@ async def test_page_shows_the_cart_and_reasons_and_changes_nothing(env):
     after = await _state(env.sessions, result["payment_id"])
     assert after[0].status == S.AWAITING_APPROVAL and after[0].updated_at == before[0].updated_at
     assert (after[1], after[2].released_at, after[3]) == (before[1], None, before[3])
+
+
+async def test_page_lists_a_risk_signal_once_when_it_caused_the_step_up(env, monkeypatch):
+    monkeypatch.setattr(orchestrator, "score_anomaly", FakeModel(0.8))
+    monkeypatch.setattr(orchestrator, "judge_intent", FakeJudge(match=True))
+    result, path, token = await _step_up(env.sessions)
+
+    page = env.client.get(path, params={"token": token}).text
+    assert "Risk score 0.80: amount $179.00." in page and "Risk score: 0.800000" in page
+    assert page.count("amount $179.00") == 1
 
 
 @pytest.mark.parametrize("token", ["", "wrong", None])
@@ -357,7 +372,8 @@ async def test_page_escapes_a_malicious_item_name(env, monkeypatch):
     result, path, token = await _step_up(env.sessions)
 
     page = env.client.get(path, params={"token": token}).text
-    assert "<script" not in page
+    # The page's own time script is the only <script>; the name never appears unescaped.
+    assert evil not in page and page.count("<script>") == 1
     assert "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;" in page
 
 

@@ -309,15 +309,19 @@ def render_page(
             f"{e(product.name if product else str(line.get('sku')))}</td>"
             f"<td class=n>{e(cost)}</td></tr>"
         )
-    reasons = "".join(f"<li>{e(str(r.get('message', '')))}</li>" for r in payment.reasons or [])
+    messages = list(dict.fromkeys(str(r.get("message", "")) for r in payment.reasons or []))
+    reasons = "".join(f"<li>{e(m)}</li>" for m in messages)
+    # Each reason once: the judge's and the model's own words are already in the reasons above
+    # when they caused the STEP_UP, so Checks adds them only when they are not.
     checks = ""
-    judge = decided.get("judge")
-    if judge:
-        checks += f"<li>Intent check: {e(str(judge.get('reason', '')))}</li>"
     if decided.get("risk_score") is not None:
         checks += f"<li>Risk score: {e(str(decided['risk_score']))}</li>"
-    for reason in decided.get("anomaly_reasons") or []:
-        checks += f"<li>Risk signal: {e(str(reason))}</li>"
+    extra = [
+        f"Intent check: {j['reason']}" for j in [decided.get("judge")] if j and j.get("reason")
+    ] + [f"Risk signal: {s}" for s in decided.get("anomaly_reasons") or []]
+    for text in extra:
+        if not any(text.split(": ", 1)[1] in m for m in messages):
+            checks += f"<li>{e(text)}</li>"
 
     expires = as_utc(payment.approval_expires_at)
     if _pending(payment) and not _due(payment, now):
@@ -325,7 +329,8 @@ def render_page(
         action = f"/approvals/{e(payment.id)}"
         hidden = f'<input type="hidden" name="token" value="{e(token)}">'
         footer = (
-            f"<p>Expires at {e(expires.strftime('%H:%M'))} UTC (about {minutes} min).</p>"
+            f'<p>Expires at <time datetime="{e(expires.isoformat().replace("+00:00", "Z"))}">'
+            f"{e(expires.strftime('%H:%M'))} UTC</time> (about {minutes} min).</p>"
             f'<form method="post" action="{action}/approve">{hidden}'
             '<button class="ok">Approve</button></form>'
             f'<form method="post" action="{action}/deny">{hidden}'
@@ -364,7 +369,14 @@ color:#fff}}
 <h2>Why Leash stopped it</h2><ul>{reasons}</ul>
 <h2>Checks</h2><ul>{checks}</ul>
 {footer}
-</main></body></html>"""
+</main>
+<script>
+document.querySelectorAll("time[datetime]").forEach(function (t) {{
+  var d = new Date(t.getAttribute("datetime"));
+  if (!isNaN(d)) t.textContent = d.toLocaleTimeString([], {{hour: "numeric", minute: "2-digit"}});
+}});
+</script>
+</body></html>"""
 
 
 async def _answer(payment_id: str, request: Request, approve: bool) -> HTMLResponse:

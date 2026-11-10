@@ -407,7 +407,7 @@ transaction. Events:
 | Tool | Arguments | Returns |
 |---|---|---|
 | `request_payment` | `mandate_id`, `merchant_id`, `items: [{sku, quantity}]` | decision response (5.4) |
-| `list_mandates` | none | `{"mandates": [{mandate_id, intent, category, max_payment_amount, remaining_budget, remaining_count, expires_at, revoked}]}` |
+| `list_mandates` | none | `{"mandates": [{mandate_id, intent, category, currency, max_payment_amount, remaining_budget, remaining_count, expires_at, revoked}]}` (active mandates only) |
 | `get_payment_status` | `payment_id` | the `GET /payments/{id}` view (5.4 plus mandate_id, merchant_id, amount, currency, items, created_at, updated_at); unknown ID is an MCP error result |
 
 - The agent sends SKUs and quantities only, never a price, amount or category. Leash prices each line
@@ -415,7 +415,7 @@ transaction. Events:
   built from. The amount is the sum of price × quantity; the category is the single category of the
   items.
 - A cart Leash cannot price is blocked before the mandate check (no hold), with these reason codes
-  (source `system`): `empty_cart`, `unknown_sku`, `sku_wrong_merchant` (the SKU belongs to another
+  (source `system`): `empty_cart`, `too_many_items` (more than 20 lines; checked before pricing, stored without the lines), `unknown_sku`, `sku_wrong_merchant` (the SKU belongs to another
   store), `invalid_quantity` (not an integer from 1 to 10), `mixed_categories` (items from more than one
   category).
 - `payments.items` stores the lines as JSON: `[{sku, quantity, unit_price}]`, with `unit_price` only on
@@ -424,7 +424,8 @@ transaction. Events:
   the catalog. The MegaDeals `md-sony-xm5` page holds the hidden injection (3 × `md-giftcard-100`).
 - The agent never sees PayPal IDs or credentials.
 - `list_mandates` returns one object, not a bare list: FastMCP splits a list into one text block per
-  item. Money is a string, `expires_at` is UTC with `Z`, revoked and expired mandates are included.
+  item. Money is a string (`currency` is always `"USD"`), `expires_at` is UTC with `Z`. Revoked and
+  expired mandates are left out, so `revoked` is always `false` here.
 - Transports: stdio (`python -m app.mcp_server`) for Claude Desktop; streamable HTTP at `/mcp` on the
   FastAPI app (stateless, JSON responses) for hosted agents. HTTP needs
   `Authorization: Bearer <MCP_AUTH_TOKEN>`: 401 if the token is missing or wrong, 503 if
@@ -489,8 +490,11 @@ compared by SHA-256 with `hmac.compare_digest`, and removed from the uvicorn acc
 
 - Unknown payment, wrong token or missing token: `404 {"detail": "Not Found"}`, nothing else.
 - The page shows the merchant, items with prices (names from the catalog), total, the mandate
-  intent, every reason message, the judge's reason, the risk score and anomaly reasons (from the
-  latest `payment.decided` entry), and the expiry time, with Approve and Deny buttons.
+  intent, every reason message once, the risk score (from the latest `payment.decided` entry), and
+  the expiry time, with Approve and Deny buttons. Under "Checks" the judge's reason and the risk
+  signals appear only if they are not already in a reason above. The expiry is a
+  `<time datetime="...Z">` element showing UTC; a small inline script rewrites it in the viewer's
+  local time.
 - Once decided or expired it shows the status instead of the buttons: `CAPTURED`, `DENIED`,
   `EXPIRED`, `FAILED` or `VOIDED`. A pending payment past its expiry is shown as `EXPIRED` by GET
   without being written; the next POST or expiry run records it.

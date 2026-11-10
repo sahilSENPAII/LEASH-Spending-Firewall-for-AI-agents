@@ -7,6 +7,7 @@ Streamable HTTP at /mcp on the FastAPI app (app.main), for the hosted server. It
 
 import hmac
 import os
+from datetime import UTC, datetime
 from functools import lru_cache
 
 from mcp.server.fastmcp import FastMCP
@@ -23,6 +24,7 @@ from app.mandates import list_mandates as stored_mandates
 from app.models import Payment
 from app.paypal import PayPalClient
 from app.read_api import _decided, _time, payment_view
+from app.times import as_utc
 
 # FastMCP 1.x ignores FASTMCP_LOG_LEVEL when built in code; honour it so a caller (the demo agent)
 # can drop the per-request INFO lines. Errors are logged either way.
@@ -73,6 +75,8 @@ async def request_payment(mandate_id: str, merchant_id: str, items: list[dict]) 
 async def list_mandates() -> dict:
     """The mandates this agent can pay under, with what is left of each. Money is a string.
 
+    Only active mandates are listed: not revoked and not expired.
+
     Returns {"mandates": [...]}: one JSON object, since FastMCP splits a bare list into one text
     block per item.
     """
@@ -82,18 +86,21 @@ async def list_mandates() -> dict:
     except Exception as exc:
         orchestrator.log.exception("list_mandates failed")
         raise ToolError("Leash could not read the mandates.") from exc
+    now = datetime.now(UTC)
     mandates = [
         {
             "mandate_id": r.terms.mandate_id,
             "intent": r.terms.intent,
             "category": r.terms.category,
+            "currency": "USD",
             "max_payment_amount": f"{r.terms.max_payment_amount:.2f}",
             "remaining_budget": f"{r.terms.total_budget - r.budget_used:.2f}",
             "remaining_count": r.terms.max_payment_count - r.payment_count,
             "expires_at": _time(r.terms.expires_at),
-            "revoked": r.revoked_at is not None,
+            "revoked": False,
         }
         for r in records
+        if r.revoked_at is None and as_utc(r.terms.expires_at) > now
     ]
     return {"mandates": mandates}
 

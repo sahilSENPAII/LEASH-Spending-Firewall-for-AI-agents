@@ -15,6 +15,7 @@ from app.config import REPO_ROOT, get_settings
 
 DEFAULT_CATALOG_PATH = REPO_ROOT / "stores" / "catalog.json"
 MAX_QUANTITY = 10
+MAX_LINES = 20
 
 
 @dataclass(frozen=True)
@@ -75,6 +76,10 @@ def _as_sent(value):
 def price_cart(catalog: dict[str, Product], merchant_id: str, items: list[dict]) -> Cart:
     if not items:
         return Cart(Decimal("0.00"), "", [], [_reason("empty_cart", "The cart has no items.")])
+    if len(items) > MAX_LINES:
+        # Checked before pricing and recorded without lines: the row's items column is small.
+        message = f"The cart has {len(items)} lines; the most Leash accepts is {MAX_LINES}."
+        return Cart(Decimal("0.00"), "", [], [_reason("too_many_items", message)])
 
     amount, categories, lines, reasons = Decimal("0.00"), set(), [], []
     for item in items:
