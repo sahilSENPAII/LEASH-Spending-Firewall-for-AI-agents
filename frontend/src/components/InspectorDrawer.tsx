@@ -86,11 +86,11 @@ export const InspectorDrawer: React.FC<InspectorDrawerProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} aria-hidden="true" />
+      <div className="fixed inset-0 z-40 bg-[#0c2b2a]/30" onClick={onClose} aria-hidden="true" />
       <aside
         role="dialog"
         aria-label={payment ? `Payment ${payment.payment_id}` : `Audit event ${auditEvent?.id}`}
-        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[480px] flex-col border-l border-line bg-card"
+        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[480px] flex-col border-l border-line bg-card shadow-[0_8px_24px_rgba(12,43,42,0.12)]"
       >
         <header className="flex h-16 shrink-0 items-center justify-between px-6">
           <div className="min-w-0">

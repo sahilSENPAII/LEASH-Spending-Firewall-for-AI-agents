@@ -193,7 +193,7 @@ export const AuditConsole: React.FC<AuditConsoleProps> = ({
     }`;
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-line bg-card">
+    <section className="overflow-hidden rounded-2xl border border-line bg-card shadow-[0_8px_24px_rgba(12,43,42,0.08)]">
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 border-b border-line px-5">
         <div className="flex items-center gap-6" role="tablist">
           <button
@@ -229,7 +229,7 @@ export const AuditConsole: React.FC<AuditConsoleProps> = ({
                   onClick={() => setDecisionFilter(outcome)}
                   className={`h-full rounded-md px-2.5 text-[13px] transition-colors duration-150 ${
                     decisionFilter === outcome
-                      ? "bg-raised text-fg shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                      ? "bg-raised text-fg "
                       : "text-fg-3 hover:text-fg-2"
                   }`}
                 >
@@ -256,7 +256,7 @@ export const AuditConsole: React.FC<AuditConsoleProps> = ({
         </div>
       </div>
 
-      <div className="ag-theme-quartz-dark h-[560px] w-full">
+      <div className="ag-theme-quartz h-[560px] w-full">
         {activeGrid === "payments" ? (
           <AgGridReact<NormalizedPayment>
             key="payments"

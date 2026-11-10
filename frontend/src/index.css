@@ -7,48 +7,48 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid #2cc5b5;
+  outline: 2px solid #0f766e;
   outline-offset: 2px;
 }
 
-.ag-theme-quartz-dark {
-  --ag-background-color: #0b2226;
-  --ag-header-background-color: #0b2226;
-  --ag-odd-row-background-color: #0b2226;
-  --ag-row-hover-color: #0f2a2f;
-  --ag-selected-row-background-color: rgba(44, 197, 181, 0.12);
-  --ag-border-color: rgba(214, 240, 236, 0.09);
-  --ag-row-border-color: rgba(214, 240, 236, 0.06);
-  --ag-foreground-color: #e9f5f3;
-  --ag-secondary-foreground-color: #a3c2be;
-  --ag-header-foreground-color: #7a9b97;
-  --ag-header-column-resize-handle-color: rgba(214, 240, 236, 0.12);
-  --ag-input-focus-border-color: #2cc5b5;
-  --ag-range-selection-border-color: #2cc5b5;
-  --ag-checkbox-checked-color: #2cc5b5;
+.ag-theme-quartz {
+  --ag-background-color: #ffffff;
+  --ag-header-background-color: #ffffff;
+  --ag-odd-row-background-color: #ffffff;
+  --ag-row-hover-color: #f2f7f6;
+  --ag-selected-row-background-color: rgba(15, 118, 110, 0.1);
+  --ag-border-color: rgba(12, 43, 42, 0.1);
+  --ag-row-border-color: rgba(12, 43, 42, 0.07);
+  --ag-foreground-color: #0c2b2a;
+  --ag-secondary-foreground-color: #3f5e5b;
+  --ag-header-foreground-color: #607b78;
+  --ag-header-column-resize-handle-color: rgba(12, 43, 42, 0.14);
+  --ag-input-focus-border-color: #0f766e;
+  --ag-range-selection-border-color: #0f766e;
+  --ag-checkbox-checked-color: #0f766e;
   --ag-wrapper-border-radius: 0;
   --ag-font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ag-font-size: 13px;
   --ag-cell-horizontal-padding: 16px;
 }
 
-.ag-theme-quartz-dark .ag-root-wrapper {
+.ag-theme-quartz .ag-root-wrapper {
   border: 0;
 }
 
-.ag-theme-quartz-dark .ag-header-cell-text {
+.ag-theme-quartz .ag-header-cell-text {
   font-weight: 500;
 }
 
-.ag-theme-quartz-dark .ag-row {
+.ag-theme-quartz .ag-row {
   cursor: pointer;
 }
 
-.ag-theme-quartz-dark .ag-paging-panel {
-  color: #7a9b97;
-  border-top-color: rgba(214, 240, 236, 0.09);
+.ag-theme-quartz .ag-paging-panel {
+  color: #607b78;
+  border-top-color: rgba(12, 43, 42, 0.1);
 }
 
-.ag-theme-quartz-dark .ag-overlay-no-rows-center {
-  color: #7a9b97;
+.ag-theme-quartz .ag-overlay-no-rows-center {
+  color: #607b78;
 }
