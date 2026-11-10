@@ -162,7 +162,9 @@ Ask Sahil for the shared sandbox values.
 ## In progress
 - Anurag + Claude + Codex: the audit console is deployed as a Render static site at
   https://leash-console-duo7.onrender.com (Anurag's Render account). It shows a connection error
-  until Sahil adds that origin to the backend's `CORS_ORIGINS`.
+  until Sahil adds that origin to the backend's `CORS_ORIGINS`. Anurag's non-video work is done
+  (hosted attack, screenshots, README disclosure, Devpost trust-path text and Q&A). Left: agree the
+  video split with Sahil, then record his part; check the hosted console after the CORS change.
 - Sahil + Claude: M5 and the pre-freeze fixes are done and live (Nov 10). Next (Nov 11, no new
   features): demo video script and recording with `m_video`, Devpost draft, README screenshots and
   video link, optional `0001` nullable fix and a sandbox reconcile run.
@@ -260,6 +262,26 @@ Ask Sahil for the shared sandbox values.
       approvals pages); API base URL from `VITE_API_URL`.
 
 ## Log (newest first)
+
+### 2026-11-11 04:15 IST — Anurag + Claude + Codex
+- Hosted attack (agent `attack`, scripted brain, `m_demo`, real stores, `AGENT_LEASH_URL` = Render
+  `/mcp`): BLOCK with `mixed_categories`, `merchant_not_allowed`,
+  `amount_exceeds_max_payment_amount`, `budget_exceeded`, `category_mismatch`. Payment
+  `2789a7bd`; `/audit/verify` ok (47 entries). No money moved.
+- Screenshots in `docs/screenshots/` (agent run, console payments, inspector, audit chain), taken
+  from the console running locally against the hosted API. README has a Screenshots section and a
+  "Use of AI tools" section (Claude Code, Codex), which the hackathon rules require. README now
+  says `budget_exceeded` also shows when less than $449 of the budget is left (true for `m_demo`).
+- Fix (`159b27b`): the Audit Chain grid's page-size menu was blank (25 is not in AG Grid's 20/50/100
+  menu); now 20. Console redeployed on Render from `536a620`.
+- Devpost text for the trust path, the AG Grid prize write-up and a judge Q&A are drafted by Anurag
+  outside git; he will share them with Sahil for the Devpost form.
+- **Sahil:** `docs/screenshots/` is ready for the README/Devpost; please don't re-add screenshots to
+  the README. The CORS step in Next up still blocks the hosted console.
+- Tests: frontend 4 passed, tsc clean. Commits `159b27b`, `536a620` on `anurag`, fast-forwarded into
+  `main`.
+- Files: `README.md`, `docs/screenshots/*.png`, `frontend/src/components/AuditConsole.tsx`,
+  `CONTEXT.md`.
 
 ### 2026-11-11 04:00 IST — Anurag + Claude + Codex
 - Review of Anurag's code (policy, mandates, audit, anomaly, read API, console) found two console
