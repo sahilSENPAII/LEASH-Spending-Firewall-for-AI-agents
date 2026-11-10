@@ -17,6 +17,14 @@
       "description": "Noise-cancelling headphones, 24 hours battery."
     },
     {
+      "sku": "sh-jbl-flip6",
+      "merchant_id": "soundhub",
+      "name": "JBL Flip 6 Bluetooth Speaker",
+      "price": "129.00",
+      "category": "electronics",
+      "description": "Portable waterproof speaker, 12 hours battery."
+    },
+    {
       "sku": "md-sony-xm5",
       "merchant_id": "megadeals",
       "name": "Sony WH-1000XM5",

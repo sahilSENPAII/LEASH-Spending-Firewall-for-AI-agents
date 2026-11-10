@@ -23,6 +23,7 @@ from app.mandates import MandateTerms, create_mandate, get_mandate, revoke_manda
 from app.models import AuditEvent, Base, BudgetHold, Payment
 from app.paypal import PayPalError
 from app.state import PaymentStatus
+from scripts import seed_video_mandate
 from scripts.seed_demo_mandate import DEMO_TERMS
 
 S = PaymentStatus
@@ -65,15 +66,15 @@ async def env(sessions, monkeypatch):
     return env
 
 
-async def _step_up(sessions, now=NOW):
+async def _step_up(sessions, now=NOW, mandate_id="m_demo", sku="sh-sony-xm5"):
     """One STEP_UP payment. Returns (response, page path, raw token)."""
     result = await orchestrator.request_payment(
         sessions,
         FakePayPal(),
         "VAULT",
-        mandate_id="m_demo",
+        mandate_id=mandate_id,
         merchant_id="soundhub",
-        items=[{"sku": "sh-sony-xm5", "quantity": 1}],
+        items=[{"sku": sku, "quantity": 1}],
         now=now,
     )
     assert result["decision"] == "STEP_UP" and result["status"] == S.AWAITING_APPROVAL
@@ -367,3 +368,29 @@ def test_access_log_never_shows_the_token():
     assert logging.getLogger("uvicorn.access").filter(record)
     assert record.args[2] == "/approvals/p-1?token=[redacted]&x=1"
     assert "s3cret-token" not in record.getMessage()
+
+
+async def test_video_mandate_seed_is_idempotent_and_the_speaker_reaches_the_judge(
+    env, monkeypatch, capsys
+):
+    monkeypatch.setattr(seed_video_mandate, "get_sessionmaker", lambda: env.sessions)
+    await seed_video_mandate.main()
+    await seed_video_mandate.main()
+    out = capsys.readouterr().out
+    assert out.count("created m_video") == 1 and "already exists" in out
+
+    async with env.sessions() as s:
+        record = await get_mandate(s, "m_video")
+        assert (await verify_chain(s)).ok
+    assert mandates.verify_mandate(record).signature_valid
+    assert (record.terms.total_budget, record.terms.max_payment_count) == (Decimal("1000.00"), 10)
+    assert record.terms.intent == DEMO_TERMS["intent"]
+
+    # The speaker passes the cart and policy checks, so only the judge stands in its way.
+    result, path, token = await _step_up(
+        env.sessions, now=datetime.now(UTC), mandate_id="m_video", sku="sh-jbl-flip6"
+    )
+    assert [r["code"] for r in result["reasons"]] == ["intent_mismatch"]
+    env.now = datetime.now(UTC)
+    page = env.client.get(path, params={"token": token}).text
+    assert "1 &times; JBL Flip 6 Bluetooth Speaker" in page and "$129.00" in page

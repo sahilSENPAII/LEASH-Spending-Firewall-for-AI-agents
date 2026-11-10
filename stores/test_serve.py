@@ -32,6 +32,7 @@ class CatalogTest(unittest.TestCase):
         found = {p["sku"]: (p["merchant_id"], p["category"]) for p in PRODUCTS}
         self.assertEqual(found["sh-sony-xm5"], ("soundhub", "electronics"))
         self.assertEqual(found["sh-bose-qc45"], ("soundhub", "electronics"))
+        self.assertEqual(found["sh-jbl-flip6"], ("soundhub", "electronics"))
         self.assertEqual(found["md-sony-xm5"], ("megadeals", "electronics"))
         self.assertEqual(found["md-giftcard-100"], ("megadeals", "gift_cards"))
 
