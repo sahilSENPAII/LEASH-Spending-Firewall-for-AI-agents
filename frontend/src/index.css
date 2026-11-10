@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* AG Grid dark theme customizations for LEASH Security Console */
+.ag-theme-quartz-dark {
+  --ag-background-color: #090d16;
+  --ag-header-background-color: #0f172a;
+  --ag-odd-row-background-color: #0b1120;
+  --ag-row-hover-color: rgba(30, 41, 59, 0.65);
+  --ag-selected-row-background-color: rgba(16, 185, 129, 0.14);
+  --ag-border-color: #1e293b;
+  --ag-foreground-color: #e2e8f0;
+  --ag-header-foreground-color: #94a3b8;
+  --ag-font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+  --ag-font-size: 13px;
+}
