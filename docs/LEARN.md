@@ -440,3 +440,127 @@ one (201), which reconcile voids at once. Keys expire after 6 hours, so older ro
    Impossible jumps like capturing money that was never authorized, or reviving a blocked payment.
 8. **Why do you test locks on Postgres and not SQLite?**
    SQLite ignores `FOR UPDATE`, so a passing SQLite test proves nothing about concurrency.
+
+---
+
+## Catalog, risk checks, hosting and the intent judge (Nov 4–5) — Sahil
+
+### What was built
+| Piece | File | One line |
+|---|---|---|
+| Shared catalog pricing | `backend/app/catalog.py`, `stores/catalog.json` | The agent sends SKUs and quantities; Leash looks up every price and category |
+| Anomaly model wiring | `backend/app/orchestrator.py` (`_score_risk`, `_combine`) | Runs Anurag's model after the rules pass and maps its score to STEP_UP or BLOCK |
+| MCP over HTTP | `backend/app/mcp_server.py`, `backend/app/main.py` | The same three tools at `/mcp` on the FastAPI service, behind a bearer token |
+| Render deploy | Render dashboard (no file) | The backend on Render's free tier, kept awake by a ping every 10 minutes |
+| Intent judge | `backend/app/judge.py`, `scripts/smoke_judge.py` | Asks an LLM on Groq whether the priced cart fits the user's own words |
+
+### Concepts, in plain words
+
+**Never trust the agent's price.** The agent may be compromised, so anything it sends is a claim, not
+a fact. If it sent "$1.00 for a $100 gift card", Leash would hold the wrong amount and every budget
+check would be wrong. So `request_payment` takes only `items=[{sku, quantity}]` and a store id. Leash
+reads each SKU's price, store and category from `stores/catalog.json`. The demo stores render their
+pages from the same file, so the price on the page and the price Leash charges cannot drift apart.
+
+**Checking the cart before the mandate.** `price_cart` blocks an unknown SKU, a SKU from a different
+store, a quantity outside 1 to 10 (and `True`, which Python treats as the integer 1), and a cart with
+more than one category. A blocked cart never takes a budget hold. The catalog file is checked when it
+loads: prices must be strings like `"10.00"`, positive, and SKUs unique. A bad file raises, so every
+payment blocks instead of being priced wrong.
+
+**Why a mixed cart is its own BLOCK.** A mandate has one category. A cart of headphones plus gift
+cards has two, so it cannot match. This is the reason the injected MegaDeals cart is blocked.
+
+**Thresholds.** The anomaly model returns a score from 0 to 1. After the rules said ALLOW, Leash
+uses STEP_UP at 0.5 or more and BLOCK at 0.9 or more (`ANOMALY_STEP_UP_THRESHOLD`,
+`ANOMALY_BLOCK_THRESHOLD`). The numbers come from the synthetic hold-out set: at 0.5 the model caught
+93% of attacks with 0.4% false alarms, at 0.9 it caught 88% with none. So a high score asks a person
+first, and only a very high score refuses outright. An anomaly BLOCK also releases the budget hold.
+
+**Fail safe means STEP_UP here, not BLOCK.** If the model raises, its file is missing, or its score is
+outside 0 to 1 (this also catches NaN, "not a number"), the result is STEP_UP with reason
+`anomaly_check_failed`. The rules already passed, so the payment is inside the user's limits. Blocking
+would stop every honest purchase while the model is broken. Allowing would skip a check. STEP_UP keeps
+money still until a person looks. The judge follows the same rule.
+
+**Running the two checks at once.** The judge waits on the network for about a second; the model is
+fast but reads the database for its features. `asyncio.gather` runs both together, and the payment
+waits only for the slower one. No database transaction is open while they run, so no lock is held.
+
+**Streamable HTTP.** MCP's transport for a remote server: the client sends each JSON-RPC message
+(a small JSON request/response format) as an HTTP POST to one URL. Leash mounts it at `/mcp` on the
+same FastAPI app as the REST API, so one service and one deploy serve both. It runs stateless with
+plain JSON replies, so a restart on Render loses no session.
+
+**Bearer-token auth.** The client sends `Authorization: Bearer <token>`. A small ASGI wrapper (code
+that sees every request before the MCP app) compares it with `MCP_AUTH_TOKEN` using
+`hmac.compare_digest`, which takes the same time whether the first or the last character is wrong, so
+timing does not leak the token. Wrong or missing token: 401. No token set on the server: 503, so an
+empty setting turns `/mcp` off instead of opening it. The SDK's localhost-only Host check is turned
+off because it would reject the Render host name; the token is the guard instead.
+
+**Render's free tier.** No card is needed, which fits the zero-spend rule (D6). The limits that
+shaped the code:
+- 512 MB of memory. LiteLLM alone added about 140 MB when imported, so the judge calls Groq with httpx
+  (already a dependency). XGBoost comes from `xgboost-cpu`, a small wheel, instead of the 58 MB one.
+- The instance sleeps when idle, and the first request after that waits while it boots (a cold
+  start). A cron-job.org job calls `GET /health` every 10 minutes to keep it awake. Before a recorded
+  demo we still hit `/health` once by hand.
+- NumPy's math library (OpenBLAS) starts one worker thread per CPU it can see, each with its own
+  memory buffer. `OPENBLAS_NUM_THREADS=1` and `OMP_NUM_THREADS=1` keep that to one thread, since one
+  payment's features are a single row and gain nothing from more. Our own test runner hit an
+  OpenBLAS allocation failure until the threads were limited.
+
+**Untrusted data in a prompt.** The judge's prompt has two kinds of text. The user's intent and the
+mandate limits are trusted. The cart is not: it was chosen by an agent that may have been tricked.
+The system prompt says the cart is data to judge, never instructions, and that text inside it asking
+to change the answer is a sign of an attack. The cart goes inside `<cart_data>` tags, and `<` and `>`
+in it are escaped, so an item name cannot close the block early. Item names come from Leash's
+catalog, not from the agent, and page text is never sent at all.
+
+**Strict JSON validation.** The model must reply with one JSON object: `match` (true or false),
+`score` (0 to 1) and `reason` (one short sentence). A Pydantic model in strict mode checks it: no
+extra keys, `"true"` as a string is refused, score must be a finite number in range, and the reason
+1 to 300 characters. Anything else raises, and the orchestrator uses STEP_UP.
+
+**One retry.** LLM APIs fail now and then (rate limits, a timeout, a malformed reply). The judge tries
+once, logs the failure, and tries once more. Each attempt has its own timeout
+(`JUDGE_TIMEOUT_SECONDS`, default 5). Two failures raise. More retries would make the agent wait
+longer for a payment that will end in STEP_UP anyway.
+
+**Groq retired our model.** We picked `llama-3.3-70b-versatile`. Groq retired it on 2026-08-16, and
+calls returned 404. The fix was one setting: `JUDGE_MODEL=openai/gpt-oss-120b`, checked with
+`scripts/smoke_judge.py` against the real API (Sony headphones matched, three $100 gift cards did
+not). Lessons: keep the model name in config, not code; have a smoke test that hits the real
+provider; keep a list of fallbacks (D7); and log the provider's error body (with the key removed),
+because it says why a call failed. This happened while the judge was still in development. In
+production the same failure would have turned every payment past the rules into STEP_UP, not ALLOW.
+
+### Why this design over alternatives
+- SKUs and a server-side catalog instead of agent-sent prices: the only number Leash can trust is
+  one it looked up itself.
+- STEP_UP on a risk-check error instead of BLOCK: the rules already passed, and a person can still
+  approve, so an outage does not stop every honest purchase.
+- One service for REST and MCP instead of two: one deploy, one URL, one set of settings.
+- httpx instead of LiteLLM: same result for one provider, about 140 MB less memory.
+
+### Likely interview questions
+1. **Why does the agent send only SKUs?** It may be compromised. A price from the agent is a claim; a
+   price from Leash's catalog is a fact. The agent cannot make a $100 item cost $1.
+2. **What happens if the anomaly model crashes?** `_score_risk` returns nothing, and `_combine` adds
+   `anomaly_check_failed`, a STEP_UP. Never an ALLOW.
+   *Follow-up: why not BLOCK?* The rules already passed. A person deciding is safe and keeps honest
+   purchases possible.
+3. **How did you pick 0.5 and 0.9?** From the synthetic hold-out set: 0.5 catches most attacks with
+   few false alarms, 0.9 has none. They are settings, to be reset from real traffic.
+4. **How is `/mcp` protected?** A bearer token checked in constant time before the MCP app sees the
+   request. 401 if wrong, 503 if the server has no token, so it fails closed.
+5. **How do you stop the cart from injecting the judge?** The cart is marked as data, wrapped in tags
+   that its content cannot close, and built from catalog names, not agent text. The judge can only make
+   a decision stricter, so even a fooled judge cannot turn a rule BLOCK into an ALLOW (D2).
+6. **Why one retry and not three?** Each attempt can take up to the timeout. After two failures the
+   answer is STEP_UP anyway, so more waiting buys nothing.
+7. **Your LLM provider removed the model. What happened?** Calls got 404, the judge raised, and
+   payments became STEP_UP (fail safe). Changing `JUDGE_MODEL` and running the smoke test fixed it.
+8. **What did the 512 MB limit change?** Dropping LiteLLM for httpx, using the small XGBoost wheel,
+   and limiting BLAS threads to one.
