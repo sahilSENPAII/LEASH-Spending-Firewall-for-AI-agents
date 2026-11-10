@@ -308,8 +308,10 @@ No database transaction is held open across a network call (judge, model, PayPal
    string), reason, model}`, or null if the judge failed. An allowed payment therefore has two
    `payment.decided` entries; readers take the latest.
    - BLOCK: status `BLOCKED`, `release_budget`, `append_audit("payment.blocked")`, commit, return.
-   - STEP_UP: status `AWAITING_APPROVAL`, `append_audit("approval.requested")`, commit, return
-     STEP_UP. The hold stays.
+   - STEP_UP: status `AWAITING_APPROVAL`, store the approval token's SHA-256 and
+     `approval_expires_at = now + APPROVAL_TTL_SECONDS`,
+     `append_audit("approval.requested", {approval_expires_at})`, commit, return STEP_UP with
+     `approval_url`. The hold stays.
    - ALLOW: commit, continue.
 4. PayPal authorize (idempotency key = `payments.idempotency_key`).
    - **T3** success: status `AUTHORIZED`, `append_audit("payment.authorized", {order_id})`, commit.
@@ -322,9 +324,20 @@ No database transaction is held open across a network call (judge, model, PayPal
    - Void also fails: status stays `AUTHORIZED`, hold kept, `append_audit("payment.failed",
      {"void_failed": true})`, commit, return BLOCK. Needs manual cleanup; logged as an error.
 
-Approvals (M5): approve → re-enter at step 4; deny → `DENIED`, `release_budget`,
-`append_audit("approval.denied")`; expiry job → `EXPIRED`, `release_budget`,
-`append_audit("approval.expired")`. Approve on an expired or decided payment is rejected.
+Approvals (`app/approvals.py`, routes in 5.8). Each answer is one transaction that locks the payment
+row (`FOR UPDATE`); the payment must be `AWAITING_APPROVAL`, undecided and not expired. A second click
+or a concurrent request sees it decided and changes nothing.
+- Approve: the mandate is checked again (signature, not revoked, not expired). If that fails it is a
+  deny with reason `mandate_no_longer_valid`. Otherwise set `approval_decision = approved`,
+  `append_audit("approval.approved")`, commit, then steps 4 and 5 run unchanged
+  (`orchestrator.authorize_and_capture`, same `idempotency_key`). The status stays
+  `AWAITING_APPROVAL` until PayPal authorizes.
+- Deny: `DENIED`, `release_budget`, `append_audit("approval.denied")`.
+- Expiry: `expire_due_approvals(sessions, now)` moves undecided payments past `approval_expires_at`
+  to `EXPIRED`, `release_budget`, `append_audit("approval.expired")`, one transaction per payment.
+  It runs at startup and every 60 s from the FastAPI lifespan, and before every approve or deny.
+- Not covered: a crash between the `approval.approved` commit and PayPal leaves the payment
+  `AWAITING_APPROVAL` with its hold; reconcile does not look at that status yet.
 
 Reconcile (`app/reconcile.py`, `scripts/reconcile_payments.py`): settles payments left in `REQUESTED`
 or `AUTHORIZED` for N minutes (default 15, minimum 5) with PayPal as the source of truth, for when a
@@ -348,15 +361,20 @@ transaction. Events:
   "reasons": [{"code": "merchant_not_allowed", "message": "...", "source": "policy | judge | anomaly | system"}],
   "risk_score": "0.045706",
   "judge": {"match": true, "score": "0.050000", "reason": "...", "model": "openai/gpt-oss-120b"},
-  "approval_url": "https://.../approvals/<payment_id> or null"
+  "approval_url": "https://.../approvals/<payment_id>?token=<token> or null",
+  "approval_expires_at": "2026-11-10T18:15:00Z or null"
 }
 ```
 - `payment_id` is null only on an internal error (no row could be written).
 - `risk_score` is a string (the audit chain refuses floats), or null when the model did not run or
   failed. `judge` is null when the judge did not run (cart or policy BLOCK) or failed; its `score` is
   a 6-decimal string for the same reason. Both are kept on PayPal failures after they ran.
-  `approval_url` is null until approvals exist (M5). `request_payment` and `get_payment_status`
-  return all these keys.
+  `request_payment` and `get_payment_status` return all these keys.
+- `approval_url` is set only in the `request_payment` response of a STEP_UP. It carries the raw
+  approval token, which is stored nowhere (the database keeps its SHA-256), so
+  `get_payment_status` and `GET /payments` always return `approval_url: null`.
+  `approval_expires_at` is in the STEP_UP response and in `get_payment_status`; `GET /payments`
+  does not return it yet.
 - Money in JSON is always a string (`"179.00"`), never a number.
 - `reasons` is empty on ALLOW.
 
@@ -399,9 +417,9 @@ MCP endpoint (5.5, bearer token), not a REST route.
 | `POST /mandates/{id}/revoke` | | revoked mandate (`revoke_mandate`) |
 | `GET /payments` | `?limit=50` | latest payments, newest first, decision response shape |
 | `GET /payments/{id}` | | decision response |
-| `GET /approvals` | `?status=pending` | payments in `AWAITING_APPROVAL` |
-| `POST /approvals/{payment_id}/approve` | | decision response after the payment continues |
-| `POST /approvals/{payment_id}/deny` | | decision response (`DENIED`) |
+| `GET /approvals/{payment_id}` | `?token=` | HTML approval page (5.8) |
+| `POST /approvals/{payment_id}/approve` | form field `token` | HTML page with the result (5.8) |
+| `POST /approvals/{payment_id}/deny` | form field `token` | HTML page with the result (5.8) |
 | `GET /audit` | `?after_id=&limit=100` | audit entries, oldest first |
 | `GET /audit/verify` | | `ChainCheck` (`{ok, checked, first_bad_id}`) |
 
@@ -429,7 +447,29 @@ Read routes landed (Anurag, Nov 5; `backend/app/read_api.py`, all read-only):
 | `ANOMALY_STEP_UP_THRESHOLD` | `0.5` (final Nov 8) | orchestrator |
 | `ANOMALY_BLOCK_THRESHOLD` | `0.9` (final Nov 8) | orchestrator |
 | `MCP_AUTH_TOKEN` | empty = `/mcp` off (503) | `app/mcp_server.py` |
-| `APPROVAL_TTL_SECONDS` | `900` | approvals expiry job |
+| `APPROVAL_TTL_SECONDS` | `900` | orchestrator (STEP_UP expiry time) |
+| `PUBLIC_BASE_URL` | `http://localhost:8000` (Render: `https://leash-84h9.onrender.com`) | orchestrator (`approval_url`) |
+
+### 5.8 Approval routes — `app/approvals.py`
+Server-rendered HTML for a phone browser: no JavaScript, inline CSS, every value HTML-escaped. The
+token in the link is the only credential (single demo user). It is `secrets.token_urlsafe(32)`,
+compared by SHA-256 with `hmac.compare_digest`, and removed from the uvicorn access log.
+
+| Method + path | Input | Returns |
+|---|---|---|
+| `GET /approvals/{payment_id}` | query `token` | the page; never changes state |
+| `POST /approvals/{payment_id}/approve` | form field `token` | the page with the result |
+| `POST /approvals/{payment_id}/deny` | form field `token` | the page with the result |
+
+- Unknown payment, wrong token or missing token: `404 {"detail": "Not Found"}`, nothing else.
+- The page shows the merchant, items with prices (names from the catalog), total, the mandate
+  intent, every reason message, the judge's reason, the risk score and anomaly reasons (from the
+  latest `payment.decided` entry), and the expiry time, with Approve and Deny buttons.
+- Once decided or expired it shows the status instead of the buttons: `CAPTURED`, `DENIED`,
+  `EXPIRED`, `FAILED` or `VOIDED`. A pending payment past its expiry is shown as `EXPIRED` by GET
+  without being written; the next POST or expiry run records it.
+- Columns on `payments` (migration `0003`): `approval_token_hash`, `approval_expires_at`,
+  `approval_decided_at`, `approval_decision` (`approved | denied | expired`).
 
 ## Open questions (answered Nov 2)
 1. Velocity limits in settings as `VELOCITY_MAX_PAYMENTS` / `VELOCITY_WINDOW_SECONDS`: **yes** (5.7).

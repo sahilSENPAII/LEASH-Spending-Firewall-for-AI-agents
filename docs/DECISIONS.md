@@ -39,6 +39,8 @@ One entry per decision: what we chose, what we rejected, why. Newest at the bott
 
 ## D8. Step-up approval through our own web page (not Telegram)
 - No bot setup; reuses the frontend; works in a phone browser.
+- Nov 10: the approval page is server-rendered by the backend (no separate frontend deploy needed),
+  protected by a single-use random token stored hashed.
 
 ## D9. Sandbox accounts are US-based, currency USD
 - Full feature coverage (Vault, authorize/capture, payee routing). PayPal India restricts domestic payments.

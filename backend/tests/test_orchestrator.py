@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from mcp.server.fastmcp.exceptions import ToolError
 from sqlalchemy import select
 
-from app import anomaly, db, judge, mandates, mcp_server, orchestrator
+from app import anomaly, approvals, db, judge, mandates, mcp_server, orchestrator
 from app.anomaly import AnomalyResult
 from app.audit import verify_chain
 from app.catalog import DEFAULT_CATALOG_PATH, load_catalog
@@ -755,6 +755,8 @@ def mcp_env(sessions, monkeypatch):
     monkeypatch.setattr(mcp_server, "get_sessionmaker", lambda: sessions)
     monkeypatch.setattr(mcp_server, "get_paypal", lambda: paypal)
     monkeypatch.setattr(mcp_server, "get_settings", lambda: settings)
+    # The app's lifespan starts the approval expiry loop; keep it on the test database.
+    monkeypatch.setattr(approvals, "get_sessionmaker", lambda: sessions)
     return paypal, settings
 
 

@@ -38,6 +38,11 @@ class Payment(Base):
     idempotency_key: Mapped[str] = mapped_column(String(64), unique=True, default=_uuid)
     paypal_order_id: Mapped[str | None] = mapped_column(String(64))
     paypal_authorization_id: Mapped[str | None] = mapped_column(String(64))
+    # Step-up approval (app/approvals.py). Only the SHA-256 hex of the token is stored.
+    approval_token_hash: Mapped[str | None] = mapped_column(String(64))
+    approval_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    approval_decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    approval_decision: Mapped[str | None] = mapped_column(String(16))  # approved/denied/expired
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

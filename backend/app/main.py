@@ -1,13 +1,14 @@
 """FastAPI entrypoint: REST API plus MCP at /mcp. Run: uv run uvicorn app.main:app --reload
 (from backend/)."""
 
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app import db, mcp_server
+from app import approvals, db, mcp_server
 from app.config import get_settings
 from app.read_api import router as read_router
 
@@ -16,7 +17,14 @@ from app.read_api import router as read_router
 async def lifespan(app: FastAPI):
     # Serves /mcp. The SDK lets a session manager run only once per process.
     async with mcp_server.mcp.session_manager.run():
-        yield
+        # Expires unanswered approvals: once now, then every minute (app/approvals.py).
+        expiry = asyncio.create_task(approvals.expiry_loop())
+        try:
+            yield
+        finally:
+            expiry.cancel()
+            with suppress(asyncio.CancelledError):
+                await expiry
 
 
 app = FastAPI(title="Leash", version="0.1.0", lifespan=lifespan)
@@ -28,6 +36,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(read_router)
+app.include_router(approvals.router)
 # The agent-facing MCP tools over streamable HTTP, on the same service (app/mcp_server.py).
 app.add_route("/mcp", mcp_server.http_app(), include_in_schema=False)
 

@@ -110,7 +110,10 @@ async def get_payment_status(payment_id: str) -> dict:
         raise ToolError("Leash could not read the payment.") from exc
     if payment is None:
         raise ToolError(f"No payment with id {payment_id!r}.")
-    return payment_view(payment, decided.get(payment_id))
+    # approval_url stays null here: only the token's hash is stored.
+    return payment_view(payment, decided.get(payment_id)) | {
+        "approval_expires_at": _time(payment.approval_expires_at)
+    }
 
 
 class RequireBearerToken:

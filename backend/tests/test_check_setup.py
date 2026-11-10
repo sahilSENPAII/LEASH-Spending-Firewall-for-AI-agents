@@ -21,7 +21,7 @@ async def seeded(sessions, monkeypatch):
     monkeypatch.setattr(mandates, "get_settings", lambda: Settings(mandate_signing_key=KEY))
     async with sessions() as s:
         await s.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
-        await s.execute(text("INSERT INTO alembic_version VALUES ('0002')"))
+        await s.execute(text("INSERT INTO alembic_version VALUES ('0003')"))
         await create_mandate(
             s,
             MandateTerms(
@@ -140,7 +140,7 @@ async def test_main_passes_on_a_good_setup(seeded, monkeypatch, capsys):
 
 
 def test_expected_migration_is_the_newest_in_the_repo():
-    assert alembic_head() == "0002"
+    assert alembic_head() == "0003"
 
 
 async def test_a_newer_migration_is_expected_once_it_exists(seeded, monkeypatch):

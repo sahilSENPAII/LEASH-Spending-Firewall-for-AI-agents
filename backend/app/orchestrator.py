@@ -10,9 +10,11 @@ Call order and release points follow docs/CONTRACTS.md section 5.3. Status chang
 """
 
 import asyncio
+import hashlib
 import json
 import logging
-from datetime import UTC, datetime
+import secrets
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -32,6 +34,7 @@ from app.mandates import (
 from app.models import Payment
 from app.paypal import PayPalClient
 from app.policy import PaymentRequest
+from app.read_api import _time
 from app.state import PaymentStatus, transition
 
 log = logging.getLogger(__name__)
@@ -55,6 +58,8 @@ def _response(
     reasons: list[dict],
     risk_score: str | None = None,
     judge: dict | None = None,
+    approval_url: str | None = None,
+    approval_expires_at: str | None = None,
 ) -> dict:
     return {
         "payment_id": payment.id if payment else None,
@@ -63,8 +68,13 @@ def _response(
         "reasons": reasons,
         "risk_score": risk_score,
         "judge": judge,
-        "approval_url": None,
+        "approval_url": approval_url,
+        "approval_expires_at": approval_expires_at,
     }
+
+
+def approval_token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
 
 
 def internal_error() -> dict:
@@ -201,22 +211,53 @@ async def _decide_and_pay(
         await session.commit()
         return _response(payment, "BLOCK", reasons, risk_score, judge)
     if outcome == "STEP_UP":
-        # The hold stays until a person approves or denies (M5).
+        # The hold stays until a person approves or denies, or the request expires
+        # (app/approvals.py). The raw token goes only into this response.
+        token = secrets.token_urlsafe(32)
+        payment.approval_token_hash = approval_token_hash(token)
+        payment.approval_expires_at = now + timedelta(seconds=settings.approval_ttl_seconds)
+        expires_at = _time(payment.approval_expires_at)
         await _move(
-            session, payment, PaymentStatus.AWAITING_APPROVAL, now, event_type="approval.requested"
+            session,
+            payment,
+            PaymentStatus.AWAITING_APPROVAL,
+            now,
+            event_type="approval.requested",
+            approval_expires_at=expires_at,
         )
         await session.commit()
-        return _response(payment, "STEP_UP", reasons, risk_score, judge)
+        base = settings.public_base_url.rstrip("/")
+        return _response(
+            payment,
+            "STEP_UP",
+            reasons,
+            risk_score,
+            judge,
+            approval_url=f"{base}/approvals/{payment.id}?token={token}",
+            approval_expires_at=expires_at,
+        )
     await session.commit()
+    return await authorize_and_capture(session, payment, paypal, vault_id, now, risk_score, judge)
 
+
+async def authorize_and_capture(
+    session: AsyncSession,
+    payment: Payment,
+    paypal: PayPalClient,
+    vault_id: str,
+    now: datetime,
+    risk_score: str | None = None,
+    judge: dict | None = None,
+) -> dict:
+    """CONTRACTS 5.3 steps 4 and 5, for an allowed payment and for an approved STEP_UP."""
     try:
         if not vault_id:
             raise ValueError("PAYPAL_VAULT_ID is not set")
         auth = await paypal.authorize(
             vault_id=vault_id,
-            amount=cart.amount,
+            amount=payment.amount,
             request_id=payment.idempotency_key,
-            custom_id=merchant_id,
+            custom_id=payment.merchant_id,
             # Same description as reconcile's replay of this call (app/reconcile.py).
             description=payment.items,
         )

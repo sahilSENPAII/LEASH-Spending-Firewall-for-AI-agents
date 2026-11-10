@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     mcp_auth_token: str = ""
     # Comma-separated origins allowed to call the API from a browser (the audit console).
     cors_origins: str = "http://localhost:5173"
+    # Where a person's phone reaches this service; approval links start with it (app/approvals.py).
+    public_base_url: str = "http://localhost:8000"
+    # How long a STEP_UP payment waits for a person before it expires.
+    approval_ttl_seconds: int = Field(default=900, gt=0)
 
 
 @lru_cache
