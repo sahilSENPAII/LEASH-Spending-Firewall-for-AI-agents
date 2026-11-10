@@ -42,7 +42,10 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 | M8 | Nov 12 | Devpost submission | — |
 
 ## Current state
-- M0 complete. Repo layout exists. `backend/app/policy.py` now contains a standalone deterministic evaluator; `agent/`, `stores/`, `frontend/`, and `ml/` remain placeholders.
+- M0–M6 complete (Nov 11). `backend/` (API, MCP, orchestrator, policy, mandates, audit, judge,
+  anomaly model, approvals), `agent/` (LangGraph attack agent), `stores/` (SoundHub, MegaDeals) and
+  `frontend/` (AG Grid console) are all real. `ml/` only points to `backend/app/anomaly.py`. CI runs
+  backend, agent, stores and frontend jobs.
 - The policy evaluator is integrated into `backend/app/orchestrator.py`, which persists payment and audit state in Postgres. The main orchestrator now uses `check_and_reserve` / `release_budget` / `append_audit`; it removed `DEMO_MANDATE` and `_usage()` in the Sahil merge (`31dcdfb`).
 - Mandates part 1: `app/canonical.py` (canonical JSON) and `app/mandates.py` (`MandateTerms` including signed `intent`, `MandateRecord` with `budget_used`/`payment_count`, Ed25519 sign/verify, and fail-closed `verify_mandate`). The 202 backend tests pass.
 - Mandates part 2 is implemented and pushed on `anurag` (`f3de389`, merged into `main` at `f50199f`): `mandates` and `budget_holds` tables, mandate CRUD, atomic budget holds, and velocity counting. The 235-test suite passes.
@@ -257,6 +260,30 @@ Ask Sahil for the shared sandbox values.
       approvals pages); API base URL from `VITE_API_URL`.
 
 ## Log (newest first)
+
+### 2026-11-11 04:00 IST — Anurag + Claude + Codex
+- Review of Anurag's code (policy, mandates, audit, anomaly, read API, console) found two console
+  bugs, now fixed (`9654191`):
+  - The judge verdict said `MISMATCH (BLOCK)` for every mismatch, but a mismatch alone is a STEP_UP
+    (the speaker demo). It now says `MATCH` / `MISMATCH`, which is the judge's answer, not the
+    outcome.
+  - The Audit Chain view fetched only the oldest 200 entries, so after 200 the newest disappeared.
+    It now follows `after_id` pages of 1000 until a short page.
+  - Polish: the 5 s poll no longer spins the Re-verify icon; the ALLOW card says "Auto-approved"
+    (it counts decisions, not captures).
+- CI gained a `frontend` job (`4f29be4`): `npm ci`, `tsc --noEmit`, Vitest, build. CI is green on
+  `main` at `4f29be4`.
+- Pushed to `anurag`, fast-forwarded into `main`; console redeployed manually on Render from
+  `4f29be4` (served bundle checked).
+- Tests: frontend 4 passed (3 new, all three fail with the fix reverted); tsc clean; backend 567
+  passed, 1 skipped; Ruff clean. Agent suite not rerun locally (CI green).
+- Left as is, on purpose: `/payments` returns `items` as a JSON string, not an array. The same
+  `payment_view` feeds the MCP `get_payment_status` result, so changing it the day before
+  submission would change what agents see; the console already parses it. Read routes stay public
+  (sandbox data only; adding auth would break the hosted console).
+- `npm audit`: 0 issues in runtime dependencies; the 6 reported are dev-only (Vite/Vitest tooling).
+- Files: `frontend/src/{App.tsx,api/readApi.ts,__tests__/readApi.test.ts}`,
+  `.github/workflows/ci.yml`, `CONTEXT.md`.
 
 ### 2026-11-11 03:50 IST — Anurag + Claude + Codex
 - Deployed the audit console as a Render static site on Anurag's account:
