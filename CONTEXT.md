@@ -37,7 +37,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 | M3 | Nov 4–5 | Attack demo: SoundHub + MegaDeals stores, LangGraph agent, injection blocked | Real-store integration merged (`aaf269b`); Windows anomaly-import fix merged (`1a182ad`); 54 agent tests pass. |
 | M4 | Nov 6–7 | Groq intent judge + XGBoost/SHAP anomaly model | Anomaly model v2 (`8cf1f50`) and Sahil's wiring (`820d249`) merged in `c0254f7`. Groq intent judge merged (`e6325bc`, main `dbc2bf7`); 537 backend tests pass, 1 skipped. **Done** (Nov 5) |
 | M5 | Nov 8 | Step-up approval via web page, survives restart | — |
-| M6 | Nov 9–10 | React frontend + AG Grid audit console. **Feature freeze Nov 10 23:59** | — |
+| M6 | Nov 9–10 | React frontend + AG Grid audit console. **Feature freeze Nov 10 23:59** | **Done** (Nov 10): AG Grid Community audit console in `frontend/` on port 5173 with dual views (`Payment Decisions` and `Audit Chain`), quick search, filters, live SHA-256 chain verification badge, and inspector drawer. |
 | M7 | Nov 11 | Hardening, README, demo video | — |
 | M8 | Nov 12 | Devpost submission | — |
 
@@ -157,11 +157,7 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Claude + Codex: bearer-token support (`14c0bab`), the MCP startup timeout (`df7a1af`),
-  and the Windows native-import fix (`1a182ad`) are merged. Backend 488 passed (1 skipped); agent 54
-  passed; Ruff is clean. The Windows E2E passes in 8.13s using local SQLite and fake PayPal. The E2E
-  harness now conditionally fakes the intent judge (`6b9b839`). Next planned work is the AG Grid
-  console in `frontend/`.
+- Anurag + Claude + Codex: M6 AG Grid Community audit console in `frontend/` is merged to `main`. Dual views (`Payment Decisions` + `Tamper-Evident Audit Chain`) with live SHA-256 chain verification badge and inspector drawer are live on port 5173.
 - Sahil + Claude: step-up approvals (M5) next. The Groq intent judge is merged to `main` (Nov 5).
 
 ## Next up
@@ -235,7 +231,7 @@ Ask Sahil for the shared sandbox values.
       72 hour-by-hour checks, and pin the agent E2E clock and thresholds (`8cf1f50`).
 - [x] Sahil: merge anomaly wiring from `sahil` (`820d249`); merged into `main` in `c0254f7` with
       model v2. Thresholds: STEP_UP at 0.5 and BLOCK at 0.9, with STEP_UP on risk-check errors.
-- [ ] Anurag (Nov 5–6): AG Grid audit console in `frontend/` on top of the read routes.
+- [x] Anurag (Nov 10): AG Grid audit console in `frontend/` (React 18 + Vite + TypeScript strict mode + Tailwind CSS + `ag-grid-react` v32); passes lint, Vitest and production build.
 - [x] Anurag: hosted `attack` through Render `/mcp` with the bearer token: BLOCK (Nov 5).
 - [ ] Both: hosted `normal` together (real $179 sandbox charge) at sync 2, Nov 6 evening IST.
       Note: `m_demo` now has $320 / 3 payments left after Sahil's hosted buy.
@@ -253,6 +249,12 @@ Ask Sahil for the shared sandbox values.
       approvals pages); API base URL from `VITE_API_URL`.
 
 ## Log (newest first)
+
+### 2026-11-10 IST — Anurag + Claude + Codex
+- Built and merged M6 AG Grid Community audit console in `frontend/` (React 18 + Vite + TypeScript strict mode + Tailwind CSS + `ag-grid-react` v32). Added `Payment Decisions` and `Tamper-Evident Audit Chain` AG Grid views with quick search, decision outcome filter pills (`ALLOW`, `STEP_UP`, `BLOCK`), XGBoost risk score indicators, live `GET /audit/verify` SHA-256 chain-verified header badge, and slide-over Inspector Drawer for Groq Judge explanations, line items, and full SHA-256 `prev_hash` -> `hash` links.
+- Added Vitest unit tests for `readApi` response normalization. All TypeScript linting (`tsc --noEmit`), Vitest tests, and Vite production builds pass.
+- Added `VITE_API_URL=http://localhost:8000` to repo-root `.env.example`.
+- Files touched: `frontend/package.json`, `frontend/tsconfig.json`, `frontend/vite.config.ts`, `frontend/tailwind.config.js`, `frontend/postcss.config.js`, `frontend/.env.example`, `frontend/index.html`, `frontend/src/types/leash.ts`, `frontend/src/api/readApi.ts`, `frontend/src/components/ChainVerifyBadge.tsx`, `frontend/src/components/AuditConsole.tsx`, `frontend/src/components/InspectorDrawer.tsx`, `frontend/src/App.tsx`, `frontend/src/main.tsx`, `frontend/src/index.css`, `frontend/src/vite-env.d.ts`, `frontend/src/__tests__/readApi.test.ts`, `.env.example`, `CONTEXT.md`.
 
 ### 2026-11-05 07:20 IST — Sahil + Claude
 - Groq intent judge merged to `main` (`6562e14` + `e6325bc`, merge `dbc2bf7`). `app/judge.py`:
