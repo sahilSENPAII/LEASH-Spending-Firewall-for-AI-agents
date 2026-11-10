@@ -21,7 +21,7 @@ export const ChainVerifyBadge: React.FC<ChainVerifyBadgeProps> = ({
     tone = "text-fg-3";
   } else if (verification.ok) {
     label = `Chain intact · ${verification.checked} events`;
-    tone = "text-fg-2";
+    tone = "text-accent";
   } else {
     label = `Chain broken at #${verification.first_bad_id ?? "?"}`;
     tone = "text-block";
@@ -42,7 +42,7 @@ export const ChainVerifyBadge: React.FC<ChainVerifyBadgeProps> = ({
         type="button"
         onClick={onVerify}
         disabled={loading}
-        className="inline-flex h-8 items-center gap-2 rounded-lg bg-fg px-3 text-[13px] font-medium text-canvas transition-[background-color,transform] duration-150 ease-out hover:bg-white active:scale-[0.98] disabled:opacity-60"
+        className="inline-flex h-8 items-center gap-2 rounded-lg bg-accent px-3 text-[13px] font-medium text-sunken transition-[background-color,transform] duration-150 ease-out hover:bg-accent-strong active:scale-[0.98] disabled:opacity-60"
       >
         <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} strokeWidth={1.5} />
         Verify

@@ -98,7 +98,7 @@ export function App(): React.ReactElement {
       <header className="sticky top-0 z-30 border-b border-line bg-canvas">
         <div className="mx-auto flex h-14 max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-8">
           <div className="flex items-center gap-3">
-            <svg viewBox="0 0 20 20" className="h-5 w-5 text-fg" aria-hidden="true">
+            <svg viewBox="0 0 20 20" className="h-5 w-5 text-accent" aria-hidden="true">
               <circle cx="5" cy="10" r="3" fill="none" stroke="currentColor" strokeWidth="1.5" />
               <circle cx="15" cy="10" r="3" fill="none" stroke="currentColor" strokeWidth="1.5" />
               <path d="M8 10h4" stroke="currentColor" strokeWidth="1.5" />
@@ -166,7 +166,7 @@ export function App(): React.ReactElement {
               <p className="text-[13px] text-fg-2">Payments checked</p>
               <p className="text-xs text-fg-3">{online ? "Latest 100" : "No data"}</p>
             </div>
-            <p className="mt-3 font-mono text-[32px] leading-none tabular-nums">{total}</p>
+            <p className="mt-3 font-mono text-[32px] leading-none tabular-nums text-accent">{total}</p>
             <div
               className="mt-5 flex h-2 gap-0.5 overflow-hidden rounded-full bg-raised"
               role="img"
