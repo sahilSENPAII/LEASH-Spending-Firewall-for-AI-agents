@@ -303,7 +303,7 @@ export const AuditConsole: React.FC<AuditConsoleProps> = ({
             columnDefs={auditCols}
             quickFilterText={quickFilter}
             pagination={true}
-            paginationPageSize={25}
+            paginationPageSize={20}
             animateRows={true}
             onRowClicked={(e) => e.data && onSelectAuditEvent(e.data)}
           />
