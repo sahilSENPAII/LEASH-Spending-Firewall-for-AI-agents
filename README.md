@@ -85,12 +85,29 @@ SoundHub, up to $200 per payment.
    problem at once: the cart mixes electronics and gift cards (`mixed_categories`), MegaDeals is not
    an allowed store (`merchant_not_allowed`), the $449 total is over the $200 limit
    (`amount_exceeds_max_payment_amount`), and gift cards are not electronics (`category_mismatch`).
+   If less than $449 of the budget is left, `budget_exceeded` is listed too.
    PayPal is never called and no budget is held.
 3. **Fits the rules, not the intent, STEP_UP.** The agent buys a $129 JBL Bluetooth speaker from
    SoundHub. It is electronics, under $200 and from an allowed store, so every rule passes. The judge
    says a speaker is not the headphones the user asked for, so Leash pauses the payment and returns
    an approval link. The person opens it on their phone and taps Approve, and PayPal sandbox
    captures the payment. Tapping Approve again does not charge twice.
+
+## Screenshots
+
+The attack against the hosted Leash. The agent obeys the hidden text, and Leash blocks the cart:
+
+![Agent run: the injected gift cards are blocked with every reason](docs/screenshots/agent-attack-blocked.png)
+
+The audit console reading the hosted backend. Payment decisions, with the blocked cart open in the
+inspector:
+
+![Payment decisions with the inspector open on the blocked cart](docs/screenshots/console-inspector.png)
+
+The audit chain. Each entry stores the hash of the one before it, and the badge shows the chain
+checks out:
+
+![Audit chain with SHA-256 links and the verified badge](docs/screenshots/console-audit-chain.png)
 
 ## Tech stack
 
@@ -286,6 +303,17 @@ between modules are in [docs/CONTRACTS.md](docs/CONTRACTS.md).
 ## Team
 
 Sahil Ray and Anurag Tiwari, PayPal AI Hackathon 2026.
+
+## Use of AI tools
+
+We used AI coding assistants while building Leash: Claude Code (Anthropic) and Codex (OpenAI).
+They helped write code, tests and documentation. We chose the design, reviewed every change, and
+ran the tests and the hosted checks ourselves. The decisions and their reasons are in
+[docs/DECISIONS.md](docs/DECISIONS.md).
+
+AI is also part of the product: the intent judge calls an LLM on Groq, and the demo agent can use
+one (`--brain groq`). The anomaly model is trained on synthetic data, because no real data on
+hijacked agents exists (D15).
 
 ## License
 
