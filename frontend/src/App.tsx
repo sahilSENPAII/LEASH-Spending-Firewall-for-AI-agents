@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Shield, Activity, Terminal } from "lucide-react";
 import {
-  fetchAuditLog,
+  fetchAllAuditLog,
   fetchHealth,
   fetchPayments,
   getApiBaseUrl,
@@ -27,13 +27,14 @@ export function App(): React.ReactElement {
   const [selectedPayment, setSelectedPayment] = useState<NormalizedPayment | null>(null);
   const [selectedAudit, setSelectedAudit] = useState<AuditEventRow | null>(null);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  // Only a manual refresh shows the spinner; the 5 s poll updates quietly.
+  const loadData = useCallback(async (manual = false) => {
+    if (manual) setLoading(true);
     setError(null);
     try {
       const [paymentsData, auditData, verifyData, healthData] = await Promise.all([
         fetchPayments(100),
-        fetchAuditLog(0, 200),
+        fetchAllAuditLog(),
         verifyAuditChain(),
         fetchHealth(),
       ]);
@@ -48,12 +49,12 @@ export function App(): React.ReactElement {
           : "Failed to connect to LEASH backend"
       );
     } finally {
-      setLoading(false);
+      if (manual) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadData();
+    void loadData(true);
     const timer = window.setInterval(() => {
       void loadData();
     }, 5000);
@@ -101,7 +102,7 @@ export function App(): React.ReactElement {
             <ChainVerifyBadge
               verification={verification}
               loading={loading}
-              onVerify={() => void loadData()}
+              onVerify={() => void loadData(true)}
             />
           </div>
         </div>
@@ -116,7 +117,7 @@ export function App(): React.ReactElement {
             </div>
             <button
               type="button"
-              onClick={() => void loadData()}
+              onClick={() => void loadData(true)}
               className="rounded bg-amber-500/20 px-2.5 py-1 font-semibold text-amber-200 hover:bg-amber-500/30"
             >
               Retry Now
@@ -130,7 +131,7 @@ export function App(): React.ReactElement {
             <p className="mt-1 font-mono text-2xl font-bold text-white">{payments.length}</p>
           </div>
           <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
-            <p className="text-xs text-emerald-300">ALLOW (Captured)</p>
+            <p className="text-xs text-emerald-300">ALLOW (Auto-approved)</p>
             <p className="mt-1 font-mono text-2xl font-bold text-emerald-400">{allowCount}</p>
           </div>
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">

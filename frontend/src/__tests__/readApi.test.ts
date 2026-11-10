@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { normalizePayment } from "../api/readApi";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { fetchAllAuditLog, normalizePayment } from "../api/readApi";
 
 describe("normalizePayment", () => {
   it("normalizes top-level PaymentView response from read_api.py", () => {
@@ -30,7 +30,7 @@ describe("normalizePayment", () => {
     expect(result.status).toBe("BLOCKED");
     expect(result.risk_score).toBeCloseTo(0.912);
     expect(result.judge?.match).toBe(false);
-    expect(result.judge?.intent_verdict).toBe("MISMATCH (BLOCK)");
+    expect(result.judge?.intent_verdict).toBe("MISMATCH");
     expect(result.reasons).toContain("merchant_not_allowed");
     expect(result.items.length).toBe(1);
     expect(result.items[0].sku).toBe("md-bundle");
@@ -55,5 +55,58 @@ describe("normalizePayment", () => {
     expect(result.decision).toBe("ALLOW");
     expect(result.status).toBe("CAPTURED");
     expect(result.risk_score).toBe(0.04);
+  });
+});
+
+describe("judge verdict", () => {
+  it("does not call a STEP_UP intent mismatch a BLOCK", () => {
+    const result = normalizePayment({
+      payment_id: "pay_03",
+      decision: "STEP_UP",
+      status: "AWAITING_APPROVAL",
+      reasons: [{ code: "intent_mismatch", message: "Item is a speaker", source: null }],
+      judge: { match: false, score: "0.950000", reason: "Item is a speaker" },
+    });
+    expect(result.decision).toBe("STEP_UP");
+    expect(result.judge?.intent_verdict).toBe("MISMATCH");
+    expect(result.judge?.intent_verdict).not.toContain("BLOCK");
+  });
+});
+
+describe("fetchAllAuditLog", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("follows after_id until a short page, so the newest entries are included", async () => {
+    const rows = Array.from({ length: 5 }, (_, i) => ({
+      id: i + 1,
+      created_at: null,
+      event_type: "payment.decided",
+      payment_id: null,
+      payload: {},
+      prev_hash: null,
+      hash: null,
+    }));
+    const urls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        urls.push(url);
+        const query = new URL(url).searchParams;
+        const after = Number(query.get("after_id"));
+        const limit = Number(query.get("limit"));
+        const page = rows.filter((r) => r.id > after).slice(0, limit);
+        return new Response(JSON.stringify(page), { status: 200 });
+      })
+    );
+
+    const result = await fetchAllAuditLog(2, "http://api.test");
+    expect(result.map((r) => r.id)).toEqual([1, 2, 3, 4, 5]);
+    expect(urls).toEqual([
+      "http://api.test/audit?after_id=0&limit=2",
+      "http://api.test/audit?after_id=2&limit=2",
+      "http://api.test/audit?after_id=4&limit=2",
+    ]);
   });
 });

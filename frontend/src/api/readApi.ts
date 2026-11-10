@@ -91,8 +91,10 @@ export function normalizePayment(raw: Record<string, unknown>): NormalizedPaymen
     const reasonText = String(rawJudge.explanation ?? rawJudge.reason ?? "");
     let intentVerdict = String(rawJudge.intent_verdict ?? rawJudge.verdict ?? "");
     if (!intentVerdict) {
-      if (match === true) intentVerdict = "MATCH (ALLOW)";
-      else if (match === false) intentVerdict = "MISMATCH (BLOCK)";
+      // A mismatch is a STEP_UP on its own and a BLOCK only with another reason, so the verdict
+      // names the judge's answer, not the payment's outcome.
+      if (match === true) intentVerdict = "MATCH";
+      else if (match === false) intentVerdict = "MISMATCH";
       else intentVerdict = decision;
     }
     judge = {
@@ -201,6 +203,20 @@ export async function fetchAuditLog(
     `/audit?after_id=${afterId}&limit=${limit}`,
     `/api/v1/audit?after_id=${afterId}&limit=${limit}`
   );
+}
+
+/** Every audit entry, oldest first, following `after_id` until a short page. */
+export async function fetchAllAuditLog(
+  pageSize = 1000,
+  baseUrl = getApiBaseUrl()
+): Promise<AuditEventRow[]> {
+  const all: AuditEventRow[] = [];
+  for (;;) {
+    const afterId = all.length ? all[all.length - 1].id : 0;
+    const page = await fetchAuditLog(afterId, pageSize, baseUrl);
+    all.push(...page);
+    if (page.length < pageSize) return all;
+  }
 }
 
 export async function verifyAuditChain(
