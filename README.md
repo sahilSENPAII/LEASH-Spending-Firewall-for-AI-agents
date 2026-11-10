@@ -110,6 +110,9 @@ status. `GET /payments`, `GET /audit` and `GET /audit/verify` are read-only. The
 `/mcp` and needs a bearer token, which is not public. The free instance can be slow on the first
 request if it has been idle.
 
+The audit console runs at https://leash-console-duo7.onrender.com, a Render static site built from
+`frontend/` with `VITE_API_URL` set to the backend above.
+
 ## Run it yourself
 
 You need Python 3.12 and [uv](https://docs.astral.sh/uv/). Settings go in a `.env` file at the repo
