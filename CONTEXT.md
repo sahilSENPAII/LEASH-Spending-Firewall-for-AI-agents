@@ -263,6 +263,20 @@ Ask Sahil for the shared sandbox values.
 
 ## Log (newest first)
 
+### 2026-11-11 04:30 IST — Anurag + Claude + Codex
+- Console redesign (`884c1d8`, on `anurag`, fast-forwarded into `main`): one graphite palette, IBM
+  Plex Sans/Mono, colour only for decisions, a decision-mix bar, sentence-case labels, and a calmer
+  inspector (risk meter with the 0.5/0.9 thresholds, hash link). The chain badge now says "Chain not
+  checked" until `/audit/verify` answers. Each grid keeps its own sort when switching tabs. Rows open
+  on click or Enter; the pinned "View" column is gone.
+- Render auto-deployed `884c1d8` to https://leash-console-duo7.onrender.com. It still shows the
+  connection error until the backend `CORS_ORIGINS` change in Next up is made.
+- Tests: frontend 4 passed, tsc clean, build ok. Checked locally against the hosted API at 1440 and
+  375 wide.
+- Files: `frontend/{index.html,tailwind.config.js}`, `frontend/src/{App.tsx,index.css}`,
+  `frontend/src/components/{AuditConsole,ChainVerifyBadge,InspectorDrawer}.tsx`,
+  `frontend/src/components/format.ts` (new).
+
 ### 2026-11-11 04:15 IST — Anurag + Claude + Codex
 - Hosted attack (agent `attack`, scripted brain, `m_demo`, real stores, `AGENT_LEASH_URL` = Render
   `/mcp`): BLOCK with `mixed_categories`, `merchant_not_allowed`,
