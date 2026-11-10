@@ -157,12 +157,17 @@ Key docs: `docs/STAGE1_REQUIREMENTS.md` (what and why), `docs/DECISIONS.md` (D1�
 Ask Sahil for the shared sandbox values.
 
 ## In progress
-- Anurag + Claude + Codex: M6 AG Grid Community audit console in `frontend/` is merged to `main`. Dual views (`Payment Decisions` + `Tamper-Evident Audit Chain`) with live SHA-256 chain verification badge and inspector drawer are live on port 5173.
+- Anurag + Claude + Codex: the audit console is deployed as a Render static site at
+  https://leash-console-duo7.onrender.com (Anurag's Render account). It shows a connection error
+  until Sahil adds that origin to the backend's `CORS_ORIGINS`.
 - Sahil + Claude: M5 and the pre-freeze fixes are done and live (Nov 10). Next (Nov 11, no new
   features): demo video script and recording with `m_video`, Devpost draft, README screenshots and
   video link, optional `0001` nullable fix and a sandbox reconcile run.
 
 ## Next up
+- [ ] Sahil: set Render `CORS_ORIGINS` on the backend to
+      `http://localhost:5173,https://leash-console-duo7.onrender.com` (no trailing slash), then Manual
+      Deploy. Check that the hosted console loads payments and the chain badge.
 - [x] Sahil: Python 3.12 via uv; Neon project `leash` (AWS us-east-1), `DATABASE_URL` in `.env`.
 - [x] Unit tests and budget fix for `backend/policy.py` (Anurag + Claude; merged into `main` from branch `anurag`, Nov 2).
 - [x] README test instructions and D12 exact-budget decision (merged from `anurag` into `main`, Nov 2).
@@ -252,6 +257,20 @@ Ask Sahil for the shared sandbox values.
       approvals pages); API base URL from `VITE_API_URL`.
 
 ## Log (newest first)
+
+### 2026-11-11 03:50 IST — Anurag + Claude + Codex
+- Deployed the audit console as a Render static site on Anurag's account:
+  https://leash-console-duo7.onrender.com. Root `frontend`, build `npm ci && npm run build`, publish
+  `dist`, `VITE_API_URL=https://leash-84h9.onrender.com`, branch `main`. The first deploy succeeded,
+  and the served bundle contains the backend URL.
+- It was added as a public Git repository, so Render does not auto-deploy on push. Redeploy it
+  from the dashboard (Manual Deploy) after frontend changes.
+- **Sahil:** the backend still sends CORS headers only for `http://localhost:5173` (checked with
+  curl), so the hosted console cannot load data yet. Add the console origin to `CORS_ORIGINS` on
+  Render and redeploy (see Next up).
+- README links the hosted console (`b0c7f15`, on `anurag`, fast-forwarded into `main`). No code
+  changes; tests not rerun.
+- Files: `README.md`, `CONTEXT.md`.
 
 ### 2026-11-10 19:20 IST — Sahil + Claude
 - **Every block reason at once** (`bad8b69`): when every SKU is known but the cart check fails
