@@ -158,8 +158,9 @@ Ask Sahil for the shared sandbox values.
 
 ## In progress
 - Anurag + Claude + Codex: M6 AG Grid Community audit console in `frontend/` is merged to `main`. Dual views (`Payment Decisions` + `Tamper-Evident Audit Chain`) with live SHA-256 chain verification badge and inspector drawer are live on port 5173.
-- Sahil + Claude: M5 done and merged (Nov 10). Next (Nov 11, polish only): show all block reasons at
-  once, approval page polish (reason listed twice, expiry in UTC), small backlog, demo video, Devpost.
+- Sahil + Claude: M5 and the pre-freeze fixes are done and live (Nov 10). Next (Nov 11, no new
+  features): demo video script and recording with `m_video`, Devpost draft, README screenshots and
+  video link, optional `0001` nullable fix and a sandbox reconcile run.
 
 ## Next up
 - [x] Sahil: Python 3.12 via uv; Neon project `leash` (AWS us-east-1), `DATABASE_URL` in `.env`.
@@ -241,9 +242,9 @@ Ask Sahil for the shared sandbox values.
       score 0.05) when the orchestrator has one, so CI stays green without `GROQ_API_KEY` (`6b9b839`).
 - [x] Sahil: merge the Groq judge after the harness fake (`dbc2bf7`); agent 54 passed locally on the
       merged code. Check CI is green on GitHub.
-- [ ] Sahil (minor): `list_mandates` should hide revoked/expired mandates (or sort active first) and
+- [x] Sahil (minor): `list_mandates` should hide revoked/expired mandates (or sort active first) and
       return `"currency": "USD"`; Claude Desktop listed the two old `m_pgtest_*` mandates.
-- [ ] Sahil (M7 demo, Nov 11): when the cart check fails, still run `evaluate_payment` and merge both reason
+- [x] Sahil (M7 demo, done Nov 10, `bad8b69`): when the cart check fails, still run `evaluate_payment` and merge both reason
       lists, so the attack shows every reason (wrong store, over the limit, mixed categories).
 - [x] Sahil (minor): add `stores/test_serve.py` (6 tests) to CI (`6c7cf52`).
 - [x] Sahil: set `OPENBLAS_NUM_THREADS=1` and `OMP_NUM_THREADS=1` on Render (free tier is 512 MB).
@@ -251,6 +252,31 @@ Ask Sahil for the shared sandbox values.
       approvals pages); API base URL from `VITE_API_URL`.
 
 ## Log (newest first)
+
+### 2026-11-10 19:20 IST — Sahil + Claude
+- **Every block reason at once** (`bad8b69`): when every SKU is known but the cart check fails
+  (`mixed_categories`, `sku_wrong_merchant`), the orchestrator also runs the policy's pure
+  evaluation (no hold, judge, model or PayPal) and merges the reasons, cart reasons first. Hosted:
+  the injected MegaDeals cart under `m_demo` now returns `mixed_categories`, `merchant_not_allowed`,
+  `amount_exceeds_max_payment_amount`, `budget_exceeded`, `category_mismatch`. Under `m_video`
+  (more budget) `budget_exceeded` drops out.
+- **Polish** (`0a8ca15`): the approval page lists each reason once and shows the expiry in the
+  viewer's local time (a `<time>` element plus a small inline script, UTC without JS);
+  `list_mandates` returns only active mandates plus `"currency": "USD"`; a cart with more than 20
+  lines is BLOCKED with `too_many_items` before pricing.
+- **Hosted checks** (Render + Neon + PayPal sandbox), all passed: `list_mandates` shows only
+  `m_demo` and `m_video`; the attack is blocked with the reasons above; the approval page shows the
+  expiry as 16:25 IST with each reason once; an unanswered STEP_UP expired on time (`ab2257e2` →
+  EXPIRED, hold released); `/audit/verify` ok (37 entries).
+- A test approval (`0828ae8d`) was reported as "tapped Deny but CAPTURED". The audit log shows
+  `approval.approved` → authorized → captured, and the live page's two forms post to `/approve` and
+  `/deny` respectively, so the tap landed on Approve. No bug. Optional polish: more space between
+  the two buttons.
+- `m_video` is now $742 / 8 payments (two approved $129 speakers). `m_demo` is $320 / 3.
+- Render auto-deploy still did not fire; these were deployed with Manual Deploy.
+- Tests: backend 567 passed, 1 skipped; agent 54; stores 6; CI green.
+- Files: `backend/app/{orchestrator,approvals,catalog,mcp_server}.py`, `backend/tests/*`,
+  `docs/CONTRACTS.md`, `README.md`, `CONTEXT.md`.
 
 ### 2026-11-10 15:25 IST — Sahil + Claude
 - **M5 step-up approvals merged** (`a2ccac3`, `d8e221d`; merge `31d5866`). STEP_UP now returns
