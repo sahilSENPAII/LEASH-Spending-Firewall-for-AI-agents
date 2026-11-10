@@ -158,7 +158,15 @@ Ask Sahil for the shared sandbox values.
 
 ## In progress
 - Anurag + Claude + Codex: M6 AG Grid Community audit console in `frontend/` is merged to `main`. Dual views (`Payment Decisions` + `Tamper-Evident Audit Chain`) with live SHA-256 chain verification badge and inspector drawer are live on port 5173.
-- Sahil + Claude: step-up approvals (M5) next. The Groq intent judge is merged to `main` (Nov 5).
+- Sahil + Claude (claimed Nov 10, 14:15 IST): **M5 step-up approvals**, aiming to merge before the
+  23:59 freeze. Plan: migration `0003` (approval token hash, expiry, decision columns on `payments`);
+  STEP_UP returns a real `approval_url` with a single-use token; approval page **server-rendered by the
+  backend** at `/approvals/{id}` (no separate frontend deploy); approve continues to PayPal, deny and
+  expiry release the budget; expiry runs in a background task. Also: a non-headphone SoundHub item
+  (`sh-jbl-flip6`, $129) so the judge gives a STEP_UP in the demo, and `scripts/seed_video_mandate.py`
+  for a fresh `m_video` mandate.
+  **Heads-up Anurag:** Sahil will run migration `0003` on Neon before merging and set
+  `PUBLIC_BASE_URL` on Render. **Cut:** the mandate form page (seed script instead).
 
 ## Next up
 - [x] Sahil: Python 3.12 via uv; Neon project `leash` (AWS us-east-1), `DATABASE_URL` in `.env`.
@@ -249,6 +257,10 @@ Ask Sahil for the shared sandbox values.
       approvals pages); API base URL from `VITE_API_URL`.
 
 ## Log (newest first)
+
+### 2026-11-10 14:15 IST — Sahil + Claude
+- Claimed M5 approvals plus demo support (`sh-jbl-flip6`, `m_video` seed). Mandate form cut for time.
+  No code changes. Files: `CONTEXT.md`.
 
 ### 2026-11-10 IST — Anurag + Claude + Codex
 - Built and merged M6 AG Grid Community audit console in `frontend/` (React 18 + Vite + TypeScript strict mode + Tailwind CSS + `ag-grid-react` v32). Added `Payment Decisions` and `Tamper-Evident Audit Chain` AG Grid views with quick search, decision outcome filter pills (`ALLOW`, `STEP_UP`, `BLOCK`), XGBoost risk score indicators, live `GET /audit/verify` SHA-256 chain-verified header badge, and slide-over Inspector Drawer for Groq Judge explanations, line items, and full SHA-256 `prev_hash` -> `hash` links.
