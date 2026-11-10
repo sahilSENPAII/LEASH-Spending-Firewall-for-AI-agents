@@ -273,7 +273,7 @@ Checked in this order. A later check can only make the outcome stricter (D2).
 
 | Check | Result | Outcome |
 |---|---|---|
-| cart check (`app/catalog.py` `price_cart`) | any problem | **BLOCK** (no mandate check, no hold) |
+| cart check (`app/catalog.py` `price_cart`) | any problem | **BLOCK** (no hold; see the note below) |
 | `check_and_reserve` | BLOCK | **BLOCK** (no hold, judge and model not called) |
 | `score_anomaly` | `score >= ANOMALY_BLOCK_THRESHOLD` | **BLOCK** (release hold) |
 | `judge_intent` | `match == False` | **STEP_UP** |
@@ -294,7 +294,15 @@ No database transaction is held open across a network call (judge, model, PayPal
 
 0. Price the cart from the catalog (`price_cart`). A cart Leash cannot price (5.5) is recorded as a
    `REQUESTED` row, then `BLOCKED` with `payment.decided` / `payment.blocked`, without calling
-   `check_and_reserve` (no mandate lock, no hold).
+   `check_and_reserve` (no mandate lock, no hold). When the cart's only problems are
+   `mixed_categories` and/or `sku_wrong_merchant` (so there is a priced total and known categories),
+   the policy's pure `evaluate_payment` also runs, on the priced total, once per distinct category
+   (sorted), with an unlocked read of the mandate and no velocity count. Its reasons are appended
+   after the cart reasons, one per code, so the person sees every problem at once (for the injected
+   MegaDeals cart: `mixed_categories`, `merchant_not_allowed`, `amount_exceeds_max_payment_amount`,
+   `category_mismatch`). A missing mandate adds `mandate_not_found`; any error adds nothing. Still
+   BLOCK: no hold, judge, model or PayPal, and the same two audit events with the merged reasons.
+   An unknown SKU, bad quantity or empty cart keeps the cart reasons only.
 1. **T1** (one transaction): insert `payments` row `REQUESTED` → `check_and_reserve(payment_id, ...)`
    → `append_audit("payment.decided", {policy decision, reasons})`.
    - BLOCK: status `BLOCKED`, `append_audit("payment.blocked")`, commit, return BLOCK.

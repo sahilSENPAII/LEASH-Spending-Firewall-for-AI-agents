@@ -25,6 +25,7 @@ from app.config import Settings, get_settings
 from app.judge import Cart as JudgeCart
 from app.judge import CartItem, JudgeResult, judge_intent
 from app.mandates import (
+    NOT_FOUND,
     MandateRecord,
     check_and_reserve,
     get_mandate,
@@ -33,7 +34,7 @@ from app.mandates import (
 )
 from app.models import Payment
 from app.paypal import PayPalClient
-from app.policy import PaymentRequest
+from app.policy import PaymentRequest, UsageSnapshot, VelocityPolicy, evaluate_payment
 from app.read_api import _time
 from app.state import PaymentStatus, transition
 
@@ -136,7 +137,10 @@ async def _decide_and_pay(
     await session.flush()
     if cart.reasons:
         # A cart Leash cannot price is blocked before the mandate check, so no hold is taken.
-        outcome, allowed, reasons = "BLOCK", False, cart.reasons
+        outcome, allowed = "BLOCK", False
+        reasons = cart.reasons + await _policy_reasons(
+            session, products, cart, merchant_id, mandate_id, settings, now
+        )
     else:
         decision = await check_and_reserve(
             session,
@@ -307,6 +311,62 @@ async def capture_authorized(
     await _move(session, payment, PaymentStatus.CAPTURED, now, capture_status=status)
     await session.commit()
     return _response(payment, "ALLOW", [], risk_score, judge)
+
+
+async def _policy_reasons(
+    session: AsyncSession,
+    products: dict[str, Product],
+    cart: Cart,
+    merchant_id: str,
+    mandate_id: str,
+    settings: Settings,
+    now: datetime,
+) -> list[dict]:
+    """The policy's reasons for a cart that is already blocked, so the person sees every problem.
+
+    Only for carts whose problem is mixed categories or an item from another store; they have a
+    priced total and known categories. The policy runs once per category on that total. Nothing
+    is locked or held, and velocity is not counted (the cart is blocked either way). The reasons
+    added are ones the cart check did not give; any error adds none (the BLOCK stands).
+    """
+    cart_codes = {r["code"] for r in cart.reasons}
+    categories = sorted(
+        {products[line["sku"]].category for line in cart.lines if "unit_price" in line}
+    )
+    if not categories or not cart_codes <= {"mixed_categories", "sku_wrong_merchant"}:
+        return []
+    try:
+        record = await get_mandate(session, mandate_id)
+        if record is None:
+            found = [NOT_FOUND]
+        else:
+            check = verify_mandate(record)
+            found = list(check.reasons)
+            for category in categories if check.mandate else []:
+                found += evaluate_payment(
+                    request=PaymentRequest(
+                        amount=cart.amount,
+                        currency="USD",
+                        category=category,
+                        merchant_id=merchant_id,
+                    ),
+                    mandate=check.mandate,
+                    usage=UsageSnapshot(record.budget_used, record.payment_count, 0),
+                    velocity_policy=VelocityPolicy(
+                        settings.velocity_max_payments,
+                        timedelta(seconds=settings.velocity_window_seconds),
+                    ),
+                    mandate_signature_valid=check.signature_valid,
+                    now=now,
+                ).reasons
+    except Exception:
+        log.exception("policy check of a blocked cart failed")
+        return []
+    extra = {}
+    for reason in found:
+        if reason.code not in cart_codes:
+            extra.setdefault(reason.code, {"code": reason.code, "message": reason.message})
+    return list(extra.values())
 
 
 def _judge_cart(products: dict[str, Product], merchant_id: str, cart: Cart) -> JudgeCart:

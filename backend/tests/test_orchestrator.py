@@ -264,7 +264,12 @@ async def test_amount_is_priced_from_the_catalog_not_the_agent(sessions):
         (
             "megadeals",
             [{"sku": "md-sony-xm5", "quantity": 1}, {"sku": "md-giftcard-100", "quantity": 3}],
-            ["mixed_categories"],
+            [
+                "mixed_categories",
+                "merchant_not_allowed",
+                "amount_exceeds_max_payment_amount",
+                "category_mismatch",
+            ],
             "449.00",
         ),
         (
@@ -302,6 +307,38 @@ async def test_cart_leash_cannot_price_is_blocked_and_recorded(
     assert await _chain_ok(sessions)
 
 
+async def test_injected_cart_shows_every_reason_and_still_holds_nothing(sessions, monkeypatch):
+    paypal, model, judge = FakePayPal(), FakeModel(), FakeJudge()
+    monkeypatch.setattr(orchestrator, "score_anomaly", model)
+    monkeypatch.setattr(orchestrator, "judge_intent", judge)
+    cart = [{"sku": "md-sony-xm5", "quantity": 1}, {"sku": "md-giftcard-100", "quantity": 3}]
+
+    result = await _pay(sessions, paypal, merchant_id="megadeals", items=cart)
+
+    # Cart reasons first, then the policy's, once per code, in a stable order.
+    assert result["decision"] == "BLOCK" and result["status"] == S.BLOCKED
+    assert _codes(result) == [
+        "mixed_categories",
+        "merchant_not_allowed",
+        "amount_exceeds_max_payment_amount",
+        "category_mismatch",
+    ]
+    assert paypal.calls == [] and model.features == [] and judge.calls == []
+    (payment,), events = await _rows(sessions)
+    assert payment.reasons == result["reasons"] == events[0].payload["reasons"]
+    assert [e.event_type for e in events] == ["payment.decided", "payment.blocked"]
+    assert await _usage(sessions) == (Decimal("0.00"), 0, [])
+    assert await _chain_ok(sessions)
+
+
+async def test_blocked_cart_for_an_unknown_mandate_says_so(sessions):
+    cart = [{"sku": "md-sony-xm5", "quantity": 1}, {"sku": "md-giftcard-100", "quantity": 3}]
+    result = await _pay(
+        sessions, FakePayPal(), mandate_id="m_other", merchant_id="megadeals", items=cart
+    )
+    assert _codes(result) == ["mixed_categories", "mandate_not_found"]
+
+
 async def test_injected_gift_cards_are_blocked_even_when_the_merchant_is_allowed(sessions):
     async with sessions() as s:
         terms = DEMO_TERMS | {
@@ -316,7 +353,9 @@ async def test_injected_gift_cards_are_blocked_even_when_the_merchant_is_allowed
     attack = await _pay(
         sessions, FakePayPal(), mandate_id="m_any_store", merchant_id="megadeals", items=cart
     )
-    assert attack["decision"] == "BLOCK" and _codes(attack) == ["mixed_categories"]
+    # The store and the amount pass here, so only the category reason joins the cart reason.
+    assert attack["decision"] == "BLOCK"
+    assert _codes(attack) == ["mixed_categories", "category_mismatch"]
     honest = await _pay(
         sessions, FakePayPal(), mandate_id="m_any_store", merchant_id="megadeals", items=cart[:1]
     )
