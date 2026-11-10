@@ -1,5 +1,5 @@
 import React from "react";
-import { ShieldCheck, ShieldAlert, RefreshCw } from "lucide-react";
+import { Link2, Link2Off, RefreshCw } from "lucide-react";
 import type { AuditVerifyResult } from "../types/leash";
 
 interface ChainVerifyBadgeProps {
@@ -13,40 +13,39 @@ export const ChainVerifyBadge: React.FC<ChainVerifyBadgeProps> = ({
   loading,
   onVerify,
 }) => {
-  const isOk = verification?.ok ?? true;
-  const checked = verification?.checked ?? 0;
-  const badId = verification?.first_bad_id;
+  let label: string;
+  let tone: string;
+  let Icon = Link2;
+  if (verification === null) {
+    label = "Chain not checked";
+    tone = "text-fg-3";
+  } else if (verification.ok) {
+    label = `Chain intact · ${verification.checked} events`;
+    tone = "text-fg-2";
+  } else {
+    label = `Chain broken at #${verification.first_bad_id ?? "?"}`;
+    tone = "text-block";
+    Icon = Link2Off;
+  }
 
   return (
     <div className="flex items-center gap-2">
       <div
-        className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors ${
-          isOk
-            ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
-            : "border-rose-500/50 bg-rose-500/15 text-rose-300"
-        }`}
-        title="Cryptographic SHA-256 hash chain status from GET /audit/verify"
+        className={`inline-flex h-8 items-center gap-2 rounded-lg border border-line px-3 text-[13px] ${tone}`}
+        title="Result of GET /audit/verify, which recomputes every SHA-256 link"
       >
-        {isOk ? (
-          <ShieldCheck className="h-4 w-4 text-emerald-400" />
-        ) : (
-          <ShieldAlert className="h-4 w-4 text-rose-400" />
-        )}
-        <span>
-          {isOk
-            ? `SHA-256 Chain Verified (${checked} events)`
-            : `Tamper Detected at Event #${badId ?? "?"}`}
-        </span>
+        <Icon className="h-4 w-4" strokeWidth={1.5} />
+        <span className="tabular-nums">{label}</span>
       </div>
 
       <button
         type="button"
         onClick={onVerify}
         disabled={loading}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700 disabled:opacity-50"
+        className="inline-flex h-8 items-center gap-2 rounded-lg bg-fg px-3 text-[13px] font-medium text-canvas transition-[background-color,transform] duration-150 ease-out hover:bg-white active:scale-[0.98] disabled:opacity-60"
       >
-        <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-        Re-verify Chain
+        <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} strokeWidth={1.5} />
+        Verify
       </button>
     </div>
   );

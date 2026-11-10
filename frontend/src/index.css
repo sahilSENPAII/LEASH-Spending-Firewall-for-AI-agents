@@ -2,16 +2,53 @@
 @tailwind components;
 @tailwind utilities;
 
-/* AG Grid dark theme customizations for LEASH Security Console */
+body {
+  font-feature-settings: "tnum" 1;
+}
+
+:focus-visible {
+  outline: 2px solid #7ea6f2;
+  outline-offset: 2px;
+}
+
 .ag-theme-quartz-dark {
-  --ag-background-color: #090d16;
-  --ag-header-background-color: #0f172a;
-  --ag-odd-row-background-color: #0b1120;
-  --ag-row-hover-color: rgba(30, 41, 59, 0.65);
-  --ag-selected-row-background-color: rgba(16, 185, 129, 0.14);
-  --ag-border-color: #1e293b;
-  --ag-foreground-color: #e2e8f0;
-  --ag-header-foreground-color: #94a3b8;
-  --ag-font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+  --ag-background-color: #19191b;
+  --ag-header-background-color: #19191b;
+  --ag-odd-row-background-color: #19191b;
+  --ag-row-hover-color: #1f1f21;
+  --ag-selected-row-background-color: #232325;
+  --ag-border-color: rgba(237, 237, 237, 0.08);
+  --ag-row-border-color: rgba(237, 237, 237, 0.06);
+  --ag-foreground-color: #ededed;
+  --ag-secondary-foreground-color: #a1a1a6;
+  --ag-header-foreground-color: #85858b;
+  --ag-header-column-resize-handle-color: rgba(237, 237, 237, 0.1);
+  --ag-input-focus-border-color: #7ea6f2;
+  --ag-range-selection-border-color: #7ea6f2;
+  --ag-checkbox-checked-color: #7ea6f2;
+  --ag-wrapper-border-radius: 0;
+  --ag-font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --ag-font-size: 13px;
+  --ag-cell-horizontal-padding: 16px;
+}
+
+.ag-theme-quartz-dark .ag-root-wrapper {
+  border: 0;
+}
+
+.ag-theme-quartz-dark .ag-header-cell-text {
+  font-weight: 500;
+}
+
+.ag-theme-quartz-dark .ag-row {
+  cursor: pointer;
+}
+
+.ag-theme-quartz-dark .ag-paging-panel {
+  color: #85858b;
+  border-top-color: rgba(237, 237, 237, 0.08);
+}
+
+.ag-theme-quartz-dark .ag-overlay-no-rows-center {
+  color: #85858b;
 }
