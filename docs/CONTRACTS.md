@@ -336,8 +336,25 @@ or a concurrent request sees it decided and changes nothing.
 - Expiry: `expire_due_approvals(sessions, now)` moves undecided payments past `approval_expires_at`
   to `EXPIRED`, `release_budget`, `append_audit("approval.expired")`, one transaction per payment.
   It runs at startup and every 60 s from the FastAPI lifespan, and before every approve or deny.
-- Not covered: a crash between the `approval.approved` commit and PayPal leaves the payment
-  `AWAITING_APPROVAL` with its hold; reconcile does not look at that status yet.
+  An undecided `AWAITING_APPROVAL` row with no `approval_expires_at` (a STEP_UP from before
+  approvals existed, which nobody can answer) counts as expired, so the first run releases it.
+- Stuck approvals: `settle_stuck_approvals(sessions, paypal, vault_id, now)` runs in the same
+  background loop (not before approve or deny). It takes payments still `AWAITING_APPROVAL` with
+  `approval_decision = approved` and `approval_decided_at` older than `APPROVAL_STUCK_SECONDS`: the
+  approve request died before PayPal's answer was recorded. It asks PayPal for the order by
+  replaying the create call with the payment's idempotency key (`find_order`, as reconcile does);
+  `authorize` is never called a second time.
+  - An order that was already there with an authorization: steps T3 to T4 run unchanged
+    (`orchestrator.capture_authorized`: `AUTHORIZED`, capture, or void and release).
+  - No order (the replay made a new one): any hold the replay placed is voided, then `FAILED`
+    with reason `approval_not_completed`, `release_budget`, `append_audit("payment.failed")`.
+  - PayPal unreachable, no `PAYPAL_VAULT_ID`, or decided more than 5 hours ago (PayPal forgets
+    keys after 6): logged and left unchanged for the next run or a person.
+  - The payment row is locked (`FOR UPDATE`) during the lookup so two runs cannot settle the same
+    payment. This is the one place a transaction spans a PayPal call; it holds no mandate or
+    audit-chain lock while it waits.
+  - Known limit: if voiding the replay's own hold fails, the next run sees that hold as an
+    existing order and captures it.
 
 Reconcile (`app/reconcile.py`, `scripts/reconcile_payments.py`): settles payments left in `REQUESTED`
 or `AUTHORIZED` for N minutes (default 15, minimum 5) with PayPal as the source of truth, for when a
@@ -448,6 +465,7 @@ Read routes landed (Anurag, Nov 5; `backend/app/read_api.py`, all read-only):
 | `ANOMALY_BLOCK_THRESHOLD` | `0.9` (final Nov 8) | orchestrator |
 | `MCP_AUTH_TOKEN` | empty = `/mcp` off (503) | `app/mcp_server.py` |
 | `APPROVAL_TTL_SECONDS` | `900` | orchestrator (STEP_UP expiry time) |
+| `APPROVAL_STUCK_SECONDS` | `300` (minimum 300) | `settle_stuck_approvals` |
 | `PUBLIC_BASE_URL` | `http://localhost:8000` (Render: `https://leash-84h9.onrender.com`) | orchestrator (`approval_url`) |
 
 ### 5.8 Approval routes — `app/approvals.py`

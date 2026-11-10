@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     public_base_url: str = "http://localhost:8000"
     # How long a STEP_UP payment waits for a person before it expires.
     approval_ttl_seconds: int = Field(default=900, gt=0)
+    # An approved payment still AWAITING_APPROVAL after this long is settled from PayPal's records.
+    # Not below 5 minutes, so a live approve request is never settled under it (as in reconcile).
+    approval_stuck_seconds: int = Field(default=300, ge=300)
 
 
 @lru_cache

@@ -21,7 +21,7 @@ from app.config import Settings
 from app.main import app
 from app.mandates import MandateTerms, create_mandate, get_mandate, revoke_mandate
 from app.models import AuditEvent, Base, BudgetHold, Payment
-from app.paypal import PayPalError
+from app.paypal import OrderLookup, PayPalError
 from app.state import PaymentStatus
 from scripts import seed_video_mandate
 from scripts.seed_demo_mandate import DEMO_TERMS
@@ -307,13 +307,19 @@ async def test_expiry_loop_runs_at_once_survives_errors_and_cancels_cleanly(env,
             raise RuntimeError("database is down")
         second.set()
 
+    async def settle(sessions, paypal, vault_id, now):
+        calls.append((sessions, now))
+        assert (paypal, vault_id) == (env.paypal, "VAULT")
+
     monkeypatch.setattr(approvals, "expire_due_approvals", expire)
+    monkeypatch.setattr(approvals, "settle_stuck_approvals", settle)
     task = asyncio.create_task(approvals.expiry_loop())
     await asyncio.wait_for(second.wait(), timeout=5)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
-    assert calls[0] == calls[1] == (env.sessions, env.now)
+    # Expire fails, settle still runs, then the next pass starts.
+    assert calls[0] == calls[1] == calls[2] == (env.sessions, env.now)
 
 
 async def test_pending_approval_survives_a_restart(env, tmp_path):
@@ -394,3 +400,128 @@ async def test_video_mandate_seed_is_idempotent_and_the_speaker_reaches_the_judg
     env.now = datetime.now(UTC)
     page = env.client.get(path, params={"token": token}).text
     assert "1 &times; JBL Flip 6 Bluetooth Speaker" in page and "$129.00" in page
+
+
+class LookupPayPal(FakePayPal):
+    """FakePayPal that also answers the idempotency-key lookup (PayPalClient.find_order)."""
+
+    def __init__(self, lookup, **kwargs):
+        super().__init__(**kwargs)
+        self.lookup = lookup
+
+    async def find_order(self, **kwargs):
+        self.calls.append(("find_order", kwargs))
+        return self.lookup
+
+
+async def _approved_then_crashed(env, age=timedelta(seconds=300)):
+    """A payment as an approve request leaves it when it dies before recording PayPal's answer."""
+    result, _, _ = await _step_up(env.sessions)
+    async with env.sessions() as s:
+        payment = await s.get(Payment, result["payment_id"])
+        payment.approval_decision = "approved"
+        payment.approval_decided_at = env.now - age
+        await s.commit()
+    return result["payment_id"]
+
+
+async def _settle(env):
+    return await approvals.settle_stuck_approvals(env.sessions, env.paypal, "VAULT", env.now)
+
+
+async def test_stuck_approval_with_an_order_at_paypal_is_captured_without_a_second_authorize(env):
+    payment_id = await _approved_then_crashed(env)
+    env.paypal = LookupPayPal(OrderLookup(order_id="O-9", authorization_id="A-9", created=False))
+
+    assert await _settle(env) == 1
+    assert await _settle(env) == 0
+
+    payment, events, hold, used = await _state(env.sessions, payment_id)
+    assert payment.status == S.CAPTURED
+    assert (payment.paypal_order_id, payment.paypal_authorization_id) == ("O-9", "A-9")
+    assert events[-2:] == ["payment.authorized", "payment.captured"]
+    (_, lookup), capture = env.paypal.calls
+    assert lookup["request_id"] == payment.idempotency_key and lookup["vault_id"] == "VAULT"
+    assert lookup["amount"] == Decimal("179.00") and lookup["description"] == payment.items
+    assert capture == ("capture", "A-9", f"{payment.idempotency_key}-capture")
+    assert hold.released_at is None and used == Decimal("179.00")
+
+
+async def test_stuck_approval_whose_capture_fails_is_voided_and_released(env):
+    payment_id = await _approved_then_crashed(env)
+    env.paypal = LookupPayPal(
+        OrderLookup(order_id="O-9", authorization_id="A-9", created=False),
+        capture_status=PayPalError("capture", 500, {}),
+    )
+
+    assert await _settle(env) == 1
+
+    payment, events, hold, used = await _state(env.sessions, payment_id)
+    assert payment.status == S.VOIDED and events[-1] == "payment.voided"
+    assert [c[0] for c in env.paypal.calls] == ["find_order", "capture", "void"]
+    assert hold.released_at is not None and used == Decimal("0.00")
+
+
+@pytest.mark.parametrize("lookup_hold", [None, "A-new"])
+async def test_stuck_approval_with_no_order_at_paypal_is_failed_and_released(env, lookup_hold):
+    payment_id = await _approved_then_crashed(env)
+    env.paypal = LookupPayPal(
+        OrderLookup(order_id="O-new", authorization_id=lookup_hold, created=True)
+    )
+
+    assert await _settle(env) == 1
+    assert await _settle(env) == 0
+
+    payment, events, hold, used = await _state(env.sessions, payment_id)
+    assert payment.status == S.FAILED and payment.reasons == [approvals.NOT_COMPLETED]
+    assert payment.reasons[0]["code"] == "approval_not_completed"
+    assert events[-1] == "payment.failed" and payment.paypal_authorization_id is None
+    # A hold placed by the lookup itself is given back; nothing is authorized or captured.
+    expected = ["find_order"] + (["void"] if lookup_hold else [])
+    assert [c[0] for c in env.paypal.calls] == expected
+    assert hold.released_at is not None and used == Decimal("0.00")
+
+
+async def test_fresh_and_unanswered_approvals_are_not_settled(env):
+    fresh = await _approved_then_crashed(env, age=timedelta(seconds=299))
+    waiting, _, _ = await _step_up(env.sessions)
+    env.paypal = LookupPayPal(OrderLookup(order_id="O-9", authorization_id="A-9", created=False))
+
+    assert await _settle(env) == 0
+
+    assert env.paypal.calls == []
+    for payment_id in (fresh, waiting["payment_id"]):
+        payment, events, hold, _ = await _state(env.sessions, payment_id)
+        assert payment.status == S.AWAITING_APPROVAL and hold.released_at is None
+        assert events[-1] == "approval.requested"
+
+
+async def test_stuck_approval_is_left_alone_when_paypal_cannot_be_asked(env):
+    payment_id = await _approved_then_crashed(env)
+
+    class Down(FakePayPal):
+        async def find_order(self, **kwargs):
+            raise PayPalError("create_order", 503, {})
+
+    env.paypal = Down()
+    assert await _settle(env) == 0
+    assert await approvals.settle_stuck_approvals(env.sessions, env.paypal, "", env.now) == 0
+
+    payment, events, hold, _ = await _state(env.sessions, payment_id)
+    assert payment.status == S.AWAITING_APPROVAL and hold.released_at is None
+
+
+async def test_step_up_from_before_approvals_existed_is_expired_and_released(env):
+    result, path, token = await _step_up(env.sessions)
+    async with env.sessions() as s:
+        payment = await s.get(Payment, result["payment_id"])
+        payment.approval_token_hash = payment.approval_expires_at = None
+        await s.commit()
+
+    assert await approvals.expire_due_approvals(env.sessions, NOW) == 1
+    assert await approvals.expire_due_approvals(env.sessions, NOW) == 0
+
+    payment, events, hold, used = await _state(env.sessions, result["payment_id"])
+    assert payment.status == S.EXPIRED and payment.approval_decision == "expired"
+    assert events[-1] == "approval.expired"
+    assert hold.released_at is not None and used == Decimal("0.00")

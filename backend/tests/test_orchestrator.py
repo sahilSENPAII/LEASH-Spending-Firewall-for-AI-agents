@@ -755,8 +755,9 @@ def mcp_env(sessions, monkeypatch):
     monkeypatch.setattr(mcp_server, "get_sessionmaker", lambda: sessions)
     monkeypatch.setattr(mcp_server, "get_paypal", lambda: paypal)
     monkeypatch.setattr(mcp_server, "get_settings", lambda: settings)
-    # The app's lifespan starts the approval expiry loop; keep it on the test database.
-    monkeypatch.setattr(approvals, "get_sessionmaker", lambda: sessions)
+    # The app's lifespan starts the approval expiry loop. It must not reach the real database,
+    # and the test database is one shared SQLite connection that a second task would disturb.
+    monkeypatch.setattr(approvals, "expiry_loop", lambda: asyncio.sleep(3600))
     return paypal, settings
 
 

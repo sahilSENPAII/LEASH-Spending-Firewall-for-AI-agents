@@ -267,19 +267,35 @@ async def authorize_and_capture(
             session, payment, PaymentStatus.FAILED, AUTHORIZE_FAILED, now, risk_score, judge
         )
 
-    payment.paypal_order_id = auth.order_id
-    payment.paypal_authorization_id = auth.authorization_id
-    await _move(session, payment, PaymentStatus.AUTHORIZED, now, order_id=auth.order_id)
+    return await capture_authorized(
+        session, payment, paypal, auth.order_id, auth.authorization_id, now, risk_score, judge
+    )
+
+
+async def capture_authorized(
+    session: AsyncSession,
+    payment: Payment,
+    paypal: PayPalClient,
+    order_id: str,
+    authorization_id: str,
+    now: datetime,
+    risk_score: str | None = None,
+    judge: dict | None = None,
+) -> dict:
+    """CONTRACTS 5.3 from T3 on, for a payment PayPal has authorized."""
+    payment.paypal_order_id = order_id
+    payment.paypal_authorization_id = authorization_id
+    await _move(session, payment, PaymentStatus.AUTHORIZED, now, order_id=order_id)
     await session.commit()
 
     try:
-        status = await paypal.capture(auth.authorization_id, f"{payment.idempotency_key}-capture")
+        status = await paypal.capture(authorization_id, f"{payment.idempotency_key}-capture")
         if status not in ("COMPLETED", "PENDING"):
             raise ValueError(f"capture status {status}")
     except Exception:
         log.exception("capture failed for payment %s", payment.id)
         try:
-            await paypal.void(auth.authorization_id, f"{payment.idempotency_key}-void")
+            await paypal.void(authorization_id, f"{payment.idempotency_key}-void")
         except Exception:
             # The hold stays AUTHORIZED and keeps counting against the budget.
             log.exception("void failed for payment %s", payment.id)

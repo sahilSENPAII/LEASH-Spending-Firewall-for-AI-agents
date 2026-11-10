@@ -13,14 +13,14 @@ import hmac
 import json
 import logging
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from html import escape
 from urllib.parse import parse_qs
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app import orchestrator
@@ -33,6 +33,7 @@ from app.mcp_server import get_paypal
 from app.models import Payment
 from app.paypal import PayPalClient
 from app.read_api import _decided
+from app.reconcile import REPLAY_WINDOW
 from app.state import PaymentStatus
 from app.times import as_utc, require_utc
 
@@ -44,6 +45,10 @@ MANDATE_INVALID = {
     "code": "mandate_no_longer_valid",
     "message": "The mandate was revoked, expired or changed after this payment was requested,"
     " so it was not paid.",
+}
+NOT_COMPLETED = {
+    "code": "approval_not_completed",
+    "message": "The payment was approved but never reached PayPal, so it was not paid.",
 }
 
 
@@ -79,7 +84,8 @@ def _pending(payment: Payment) -> bool:
 
 
 def _due(payment: Payment, now: datetime) -> bool:
-    return as_utc(payment.approval_expires_at) <= now
+    # No expiry time: a STEP_UP from before approvals existed. Nobody can answer it.
+    return payment.approval_expires_at is None or as_utc(payment.approval_expires_at) <= now
 
 
 async def _close(
@@ -114,7 +120,7 @@ async def expire_due_approvals(sessions: async_sessionmaker[AsyncSession], now: 
                 select(Payment.id).where(
                     Payment.status == PaymentStatus.AWAITING_APPROVAL,
                     Payment.approval_decided_at.is_(None),
-                    Payment.approval_expires_at <= now,
+                    or_(Payment.approval_expires_at <= now, Payment.approval_expires_at.is_(None)),
                 )
             )
         ).all()
@@ -132,6 +138,78 @@ async def expire_due_approvals(sessions: async_sessionmaker[AsyncSession], now: 
     return expired
 
 
+def _stuck(payment: Payment, cutoff: datetime) -> bool:
+    return (
+        payment.status == PaymentStatus.AWAITING_APPROVAL
+        and payment.approval_decision == "approved"
+        and as_utc(payment.approval_decided_at) <= cutoff
+    )
+
+
+async def settle_stuck_approvals(
+    sessions: async_sessionmaker[AsyncSession], paypal: PayPalClient, vault_id: str, now: datetime
+) -> int:
+    """Finish approved payments whose approve request died before PayPal's answer was recorded.
+
+    PayPal is asked for the order by replaying the create call with the payment's idempotency
+    key (as app/reconcile.py does); `paypal.authorize` is never called again. An order that was
+    already there is captured. Otherwise the payment is FAILED and its budget released. Anything
+    unclear raises and leaves the payment for the next run. Returns how many were settled.
+    """
+    now = require_utc(now)
+    cutoff = now - timedelta(seconds=get_settings().approval_stuck_seconds)
+    async with sessions() as session:
+        stuck = (
+            await session.scalars(
+                select(Payment.id).where(
+                    Payment.status == PaymentStatus.AWAITING_APPROVAL,
+                    Payment.approval_decision == "approved",
+                    Payment.approval_decided_at <= cutoff,
+                )
+            )
+        ).all()
+    settled = 0
+    for payment_id in stuck:
+        try:
+            async with sessions() as session:
+                # The payment row stays locked during the lookup, so no second run can settle it
+                # too. No mandate or audit-chain lock is held across the PayPal call.
+                payment = await session.get(Payment, payment_id, with_for_update=True)
+                if not _stuck(payment, cutoff):
+                    continue
+                if not vault_id:
+                    raise ValueError("PAYPAL_VAULT_ID is not set")
+                if now - as_utc(payment.approval_decided_at) >= REPLAY_WINDOW:
+                    raise ValueError("too old to look up by idempotency key; check by hand")
+                lookup = await paypal.find_order(
+                    vault_id=vault_id,
+                    amount=payment.amount,
+                    request_id=payment.idempotency_key,
+                    currency=payment.currency,
+                    custom_id=payment.merchant_id,
+                    description=payment.items,
+                )
+                if lookup.authorization_id is not None and not lookup.created:
+                    await orchestrator.capture_authorized(
+                        session, payment, paypal, lookup.order_id, lookup.authorization_id, now
+                    )
+                else:
+                    if lookup.authorization_id is not None:
+                        # The lookup itself placed this hold; the payment never had one.
+                        # shortcut: if this void fails, the next run finds the hold as an existing
+                        # order and captures it; save the ids first (as reconcile does) to fix.
+                        await paypal.void(
+                            lookup.authorization_id, f"{payment.idempotency_key}-void"
+                        )
+                    await orchestrator._fail(
+                        session, payment, PaymentStatus.FAILED, NOT_COMPLETED, now, None, None
+                    )
+                settled += 1
+        except Exception:
+            log.exception("could not settle approved payment %s", payment_id)
+    return settled
+
+
 async def expiry_loop() -> None:
     """Runs for the life of the app (app.main lifespan). The first pass is at startup, which
     covers approvals that ran out while the server was down."""
@@ -140,6 +218,12 @@ async def expiry_loop() -> None:
             await expire_due_approvals(get_sessionmaker(), _now())
         except Exception:
             log.exception("approval expiry run failed")
+        try:
+            await settle_stuck_approvals(
+                get_sessionmaker(), get_paypal(), get_settings().paypal_vault_id, _now()
+            )
+        except Exception:
+            log.exception("stuck approval run failed")
         await asyncio.sleep(EXPIRY_INTERVAL_SECONDS)
 
 
