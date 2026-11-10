@@ -263,6 +263,11 @@ Ask Sahil for the shared sandbox values.
 
 ## Log (newest first)
 
+### 2026-11-11 04:50 IST — Anurag + Claude + Codex
+- Retook the three console screenshots in `docs/screenshots/` with the teal design (payments,
+  inspector on the blocked cart, audit chain), from a local build reading the hosted API. README
+  text is unchanged. On `anurag`, fast-forwarded into `main`.
+
 ### 2026-11-11 04:40 IST — Anurag + Claude + Codex
 - Console colours changed after review (`332b5d0`, then `cfaf104`; on `anurag`, fast-forwarded into
   `main`): the header, title and summary cards sit on a deep teal band; the grids and inspector are
