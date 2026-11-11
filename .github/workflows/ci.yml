@@ -21,9 +21,7 @@ jobs:
         run: uv run --frozen pytest -q
 
   agent:
-    # Playwright's --with-deps installs Ubuntu packages by name. It started failing when
-    # ubuntu-latest began moving to Ubuntu 26, so this job stays on 24.04.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: agent
@@ -33,7 +31,9 @@ jobs:
       - run: uv sync --frozen --python 3.12
       # The end-to-end test starts the real backend MCP server, so the backend must be synced too.
       - run: uv sync --frozen --python 3.12 --directory ../backend
-      - run: uv run --frozen playwright install --with-deps chromium
+      # No --with-deps: the runner image already has Chrome's system libraries, and apt's mirror
+      # was unreachable from the runner (10-minute failures on Nov 11).
+      - run: uv run --frozen playwright install chromium
       - name: Lint
         run: uv run --frozen ruff check leash_agent tests
       - name: Tests
