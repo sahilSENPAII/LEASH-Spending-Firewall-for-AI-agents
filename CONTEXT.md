@@ -161,18 +161,18 @@ Ask Sahil for the shared sandbox values.
 
 ## In progress
 - Anurag + Claude + Codex: the audit console is deployed as a Render static site at
-  https://leash-console-duo7.onrender.com (Anurag's Render account). It shows a connection error
-  until Sahil adds that origin to the backend's `CORS_ORIGINS`. Anurag's non-video work is done
-  (hosted attack, screenshots, README disclosure, Devpost trust-path text and Q&A). Left: agree the
-  video split with Sahil, then record his part; check the hosted console after the CORS change.
+  https://leash-console-duo7.onrender.com (Anurag's Render account) and reads the hosted backend
+  (CORS live, checked Nov 11). Anurag's non-video work is done (hosted attack, screenshots, README
+  disclosure, Devpost trust-path text and Q&A, hosted console check). Left: agree the video split
+  with Sahil, then record Anurag's part.
 - Sahil + Claude: M5 and the pre-freeze fixes are done and live (Nov 10). Next (Nov 11, no new
   features): demo video script and recording with `m_video`, Devpost draft, README screenshots and
   video link, optional `0001` nullable fix and a sandbox reconcile run.
 
 ## Next up
-- [ ] Sahil: set Render `CORS_ORIGINS` on the backend to
-      `http://localhost:5173,https://leash-console-duo7.onrender.com` (no trailing slash), then Manual
-      Deploy. Check that the hosted console loads payments and the chain badge.
+- [x] Sahil: set Render `CORS_ORIGINS` on the backend to
+      `http://localhost:5173,https://leash-console-duo7.onrender.com`. Done; Anurag checked the hosted
+      console loads payments, the chain badge and the inspector (Nov 11).
 - [x] Sahil: Python 3.12 via uv; Neon project `leash` (AWS us-east-1), `DATABASE_URL` in `.env`.
 - [x] Unit tests and budget fix for `backend/policy.py` (Anurag + Claude; merged into `main` from branch `anurag`, Nov 2).
 - [x] README test instructions and D12 exact-budget decision (merged from `anurag` into `main`, Nov 2).
@@ -262,6 +262,14 @@ Ask Sahil for the shared sandbox values.
       approvals pages); API base URL from `VITE_API_URL`.
 
 ## Log (newest first)
+
+### 2026-11-11 IST — Anurag + Claude + Codex
+- Hosted console check after Sahil's CORS change: the backend now sends CORS headers for
+  `https://leash-console-duo7.onrender.com` and `http://localhost:5173`. The live console serves the
+  same build as `main` (`103bebf`), loads 16 decisions, shows "Chain intact · 47 events", opens the
+  inspector (step-up speaker: judge mismatch 0.95, risk 0.005) and the Audit chain tab (47 entries,
+  20 per page). No browser console errors. No code changes.
+- Files: `CONTEXT.md`.
 
 ### 2026-11-11 04:50 IST — Anurag + Claude + Codex
 - Retook the three console screenshots in `docs/screenshots/` with the teal design (payments,
