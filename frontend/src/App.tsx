@@ -105,10 +105,18 @@ export function App(): React.ReactElement {
       <header className="sticky top-0 z-30 border-b border-white/10 bg-band text-white">
         <div className="mx-auto flex h-14 max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-8">
           <div className="flex items-center gap-3">
-            <svg viewBox="0 0 20 20" className="h-5 w-5 text-[#6ee7d8]" aria-hidden="true">
-              <circle cx="5" cy="10" r="3" fill="none" stroke="currentColor" strokeWidth="1.5" />
-              <circle cx="15" cy="10" r="3" fill="none" stroke="currentColor" strokeWidth="1.5" />
-              <path d="M8 10h4" stroke="currentColor" strokeWidth="1.5" />
+            <svg
+              viewBox="0 0 64 64"
+              className="h-6 w-6"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M15 10V38a8 8 0 0 0 8 8H33" />
+              <circle cx="41" cy="46" r="8" />
             </svg>
             <span className="text-[17px] font-semibold tracking-tight">Leash</span>
             <span className="hidden text-sm text-white/60 sm:inline">Audit console</span>

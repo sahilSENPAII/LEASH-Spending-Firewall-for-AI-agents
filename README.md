@@ -1,3 +1,5 @@
+<img src="docs/logo/leash-icon.svg" alt="Leash logo" width="72" />
+
 # Leash
 
 Leash is a spending firewall that sits between AI agents and PayPal. An agent can only pay through
