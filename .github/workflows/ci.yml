@@ -21,7 +21,9 @@ jobs:
         run: uv run --frozen pytest -q
 
   agent:
-    runs-on: ubuntu-latest
+    # Playwright's --with-deps installs Ubuntu packages by name. It started failing when
+    # ubuntu-latest began moving to Ubuntu 26, so this job stays on 24.04.
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: agent
