@@ -1,4 +1,4 @@
-<img src="docs/logo/leash-icon.svg" alt="Leash logo" width="72" />
+<img src="docs/logo/leash-logo.svg" alt="Leash logo" width="96" />
 
 # Leash
 
