@@ -263,6 +263,16 @@ Ask Sahil for the shared sandbox values.
 
 ## Log (newest first)
 
+### 2026-11-11 22:25 IST — Anurag + Claude + Codex
+- Final logo chosen by Anurag (`892dc1d`, on `anurag`, fast-forwarded into `main`): a double-wall
+  hexagon around an upright dimple key in soft lime `#B9E84C`, on near-black. It replaces the
+  earlier L-and-ring files in `docs/logo/`. Files: `leash-logo.svg` (black tile; shown in the
+  README), `-transparent`, `-on-white`, `-simple` (no dimples, for small sizes), and PNGs at 1024
+  and 512.
+- Not changed: the console header and favicon still use the older L-and-ring mark. Switching them
+  needs a frontend commit and a redeploy.
+- Files: `README.md`, `docs/logo/*`, `CONTEXT.md`.
+
 ### 2026-11-11 IST — Anurag + Claude + Codex
 - Logo: an "L" drawn as one line ending in a ring. First committed in teal (`399eb0c`), then
   recoloured to black, white and light lime `#DDFF6E` (`e3ace0a`). Files in `docs/logo/`: icon on a
