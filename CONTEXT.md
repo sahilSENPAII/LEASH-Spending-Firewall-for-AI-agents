@@ -268,10 +268,13 @@ Ask Sahil for the shared sandbox values.
   goes on the Devpost form instead) and changed the tech stack to "Hosting: Render".
 - CI: the `agent` job failed on `b9927ea` and `8f07ac9` (docs-only commits) at
   `playwright install --with-deps chromium`, after ~10 min, with exit code 1. Backend, frontend and
-  stores passed. GitHub's notice says `ubuntu-latest` is moving to Ubuntu 26; inferred cause: the
-  locked Playwright 1.64.1 cannot install its Ubuntu packages there (the step log needs a GitHub
-  login, so the exact error was not read). Fix (`902a1a2`, on `anurag`, fast-forwarded into
-  `main`): the `agent` job runs on `ubuntu-24.04`; other jobs stay on `ubuntu-latest`.
+  stores passed. The step log (read by Anurag) shows the real cause: apt could not resolve
+  `azure.archive.ubuntu.com` ("Temporary failure resolving"), so the Ubuntu packages never
+  downloaded. A first guess (Ubuntu 26, pin to 24.04 in `902a1a2`) was wrong; 24.04 failed the
+  same way. Fix (`bee9c21`, on `anurag`, fast-forwarded into `main`): back to `ubuntu-latest`, and
+  `playwright install chromium` without `--with-deps`, since the runner image already has Chrome's
+  libraries and Playwright's browser download does not use apt. CI is green on `bee9c21` (all four
+  jobs, agent included).
 - Files: `README.md`, `.github/workflows/ci.yml`, `CONTEXT.md`.
 
 ### 2026-11-11 IST — Anurag + Claude + Codex
