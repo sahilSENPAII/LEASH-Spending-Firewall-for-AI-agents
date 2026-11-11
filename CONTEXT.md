@@ -264,6 +264,18 @@ Ask Sahil for the shared sandbox values.
 ## Log (newest first)
 
 ### 2026-11-11 IST — Anurag + Claude + Codex
+- Logo: an "L" drawn as one line ending in a ring. First committed in teal (`399eb0c`), then
+  recoloured to black, white and light lime `#DDFF6E` (`e3ace0a`). Files in `docs/logo/`: icon on a
+  lime tile (`leash-icon.svg`) and on a black tile, the mark in black, white and lime, and lockups
+  for white and black backgrounds. The lockups use live IBM Plex Sans text.
+- Used in: the README (icon above the title), the console favicon (`frontend/public/favicon.svg`)
+  and the console header (white mark, replacing a placeholder glyph). The console's teal theme is
+  unchanged.
+- Tests: frontend 4 passed, tsc clean, build ok. On `anurag`, fast-forwarded into `main`.
+- Files: `README.md`, `docs/logo/*.svg`, `frontend/index.html`, `frontend/public/favicon.svg`,
+  `frontend/src/App.tsx`, `CONTEXT.md`.
+
+### 2026-11-11 IST — Anurag + Claude + Codex
 - README (`8f07ac9`, committed on `main`): removed the "Use of AI tools" section (the AI disclosure
   goes on the Devpost form instead) and changed the tech stack to "Hosting: Render".
 - CI: the `agent` job failed on `b9927ea` and `8f07ac9` (docs-only commits) at
