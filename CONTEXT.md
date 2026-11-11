@@ -269,9 +269,10 @@ Ask Sahil for the shared sandbox values.
   earlier L-and-ring files in `docs/logo/`. Files: `leash-logo.svg` (black tile; shown in the
   README), `-transparent`, `-on-white`, `-simple` (no dimples, for small sizes), and PNGs at 1024
   and 512.
-- Not changed: the console header and favicon still use the older L-and-ring mark. Switching them
-  needs a frontend commit and a redeploy.
-- Files: `README.md`, `docs/logo/*`, `CONTEXT.md`.
+- Console switched too (`32a3298`): the header shows the hexagon and key (white walls, lime key),
+  and the favicon is `leash-logo-simple.svg`. Frontend tests 4 passed, tsc clean, build ok.
+- Files: `README.md`, `docs/logo/*`, `frontend/src/App.tsx`, `frontend/public/favicon.svg`,
+  `CONTEXT.md`.
 
 ### 2026-11-11 IST — Anurag + Claude + Codex
 - Logo: an "L" drawn as one line ending in a ring. First committed in teal (`399eb0c`), then
