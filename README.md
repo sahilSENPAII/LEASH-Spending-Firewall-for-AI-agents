@@ -118,7 +118,7 @@ checks out:
 - XGBoost for the anomaly model, with per-feature reasons from XGBoost's own SHAP values
 - Demo agent: LangGraph and Playwright (headless Chromium)
 - Frontend: React 18, Vite, TypeScript, Tailwind CSS, AG Grid Community
-- Hosting: Render free tier. CI: GitHub Actions
+- Hosting: Render. CI: GitHub Actions
 
 ## Live backend
 
@@ -303,17 +303,6 @@ between modules are in [docs/CONTRACTS.md](docs/CONTRACTS.md).
 ## Team
 
 Sahil Ray and Anurag Tiwari, PayPal AI Hackathon 2026.
-
-## Use of AI tools
-
-We used AI coding assistants while building Leash: Claude Code (Anthropic) and Codex (OpenAI).
-They helped write code, tests and documentation. We chose the design, reviewed every change, and
-ran the tests and the hosted checks ourselves. The decisions and their reasons are in
-[docs/DECISIONS.md](docs/DECISIONS.md).
-
-AI is also part of the product: the intent judge calls an LLM on Groq, and the demo agent can use
-one (`--brain groq`). The anomaly model is trained on synthetic data, because no real data on
-hijacked agents exists (D15).
 
 ## License
 
