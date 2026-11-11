@@ -105,18 +105,15 @@ export function App(): React.ReactElement {
       <header className="sticky top-0 z-30 border-b border-white/10 bg-band text-white">
         <div className="mx-auto flex h-14 max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-8">
           <div className="flex items-center gap-3">
-            <svg
-              viewBox="0 0 64 64"
-              className="h-6 w-6"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M15 10V38a8 8 0 0 0 8 8H33" />
-              <circle cx="41" cy="46" r="8" />
+            <svg viewBox="0 0 64 64" className="h-7 w-7" fill="none" strokeLinejoin="round" aria-hidden="true">
+              <path d="M32 4 56.250 18V46L32 60 7.750 46V18Z" stroke="currentColor" strokeWidth="2.5" />
+              <path d="M32 10.500 50.620 21.250V42.750L32 53.500 13.380 42.750V21.250Z" stroke="currentColor" strokeWidth="5" />
+              <path
+                d="M26.200 17.500h11.600a2 2 0 0 1 2 2v5.200l-4.300 4.300h-7L24.200 24.700v-5.200a2 2 0 0 1 2-2Z"
+                fill="#B9E84C"
+              />
+              <path d="M28.500 28.600h7V43.200L32 46.700 28.500 43.200Z" fill="#B9E84C" />
+              <circle cx="32" cy="21.300" r="1.900" className="fill-band" />
             </svg>
             <span className="text-[17px] font-semibold tracking-tight">Leash</span>
             <span className="hidden text-sm text-white/60 sm:inline">Audit console</span>
