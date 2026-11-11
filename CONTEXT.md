@@ -264,6 +264,17 @@ Ask Sahil for the shared sandbox values.
 ## Log (newest first)
 
 ### 2026-11-11 IST — Anurag + Claude + Codex
+- README (`8f07ac9`, committed on `main`): removed the "Use of AI tools" section (the AI disclosure
+  goes on the Devpost form instead) and changed the tech stack to "Hosting: Render".
+- CI: the `agent` job failed on `b9927ea` and `8f07ac9` (docs-only commits) at
+  `playwright install --with-deps chromium`, after ~10 min, with exit code 1. Backend, frontend and
+  stores passed. GitHub's notice says `ubuntu-latest` is moving to Ubuntu 26; inferred cause: the
+  locked Playwright 1.64.1 cannot install its Ubuntu packages there (the step log needs a GitHub
+  login, so the exact error was not read). Fix (`902a1a2`, on `anurag`, fast-forwarded into
+  `main`): the `agent` job runs on `ubuntu-24.04`; other jobs stay on `ubuntu-latest`.
+- Files: `README.md`, `.github/workflows/ci.yml`, `CONTEXT.md`.
+
+### 2026-11-11 IST — Anurag + Claude + Codex
 - Hosted console check after Sahil's CORS change: the backend now sends CORS headers for
   `https://leash-console-duo7.onrender.com` and `http://localhost:5173`. The live console serves the
   same build as `main` (`103bebf`), loads 16 decisions, shows "Chain intact · 47 events", opens the
